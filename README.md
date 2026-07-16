@@ -9,9 +9,9 @@ gathers one numeric value per frame-in-die position.
 
 ## Problem statement
 
-The interview question, verbatim: *"Our tool photographs a wafer slice by slice — [a slice is a
+*"Our tool photographs a wafer slice by slice — [a slice is a
 strip of dies, and each die is captured as several frames](#appendix-slice-anatomy). Every picture
-lands in one slot of a shared memory box, and from then on a frame is named by its slot/offset,
+lands in one slot (AKA offset) of a shared memory box, and from then on a frame is named by its slot,
 never copied. Design the controller that, one slice at a time, splits the slice's work across a
 group of compute nodes; each invocation runs an algorithm on all the frames that share one
 frame-in-die position (i.e. the same frame position in every die) and returns a single numeric
@@ -20,10 +20,8 @@ frames](#slice-diagram) yield six values for the slice."*
 
 ## Derived requirements
 
-Constraints the problem statement implies but does not spell out:
-
 - The acquisition side reports back which picture belongs where: **die index + frame-in-die**,
-  mapped to the slot/offset that holds it.
+  mapped to the slot that holds it.
 - The **compute nodes are separate machines**, and any node can serve any invocation.
 - Every die is a copy of the same circuit, so one frame-in-die position is the same physical
   region in every die — the natural input set for comparing that region across dies.
@@ -37,8 +35,8 @@ link, without going through a filesystem or the controller. The controller works
 time. It asks the camera to photograph the slice<sup>①</sup>; each picture is written into a free
 slot of the memory box<sup>②</sup>, and the controller records which die and frame-in-die each
 slot holds<sup>③</sup> in its frame index — a lookup table from die index + frame-in-die to
-slot/offset. It then orders processing of all frames of the slice<sup>④</sup>: one
-invocation per frame-in-die position, carrying the slot/offsets of that frame in every die, sent
+slot. It then orders processing of all frames of the slice<sup>④</sup>: one
+invocation per frame-in-die position, carrying the slots of that frame in every die, sent
 to whichever node is free next — so a slow position ties up one machine, not the slice. The node
 pulls those frames straight out of the memory box, runs the algorithm across them — every die is
 a copy of the same circuit, so the input set is one physical region seen once per die — and
@@ -56,7 +54,7 @@ results flow back up (③ placements, ⑤ values).
 flowchart TB
     subgraph CTRLM[controller machine — one process]
         CTRL[<b>Controller</b><br/>drives one slice at a time]
-        IDX[<b>frame index</b><br/>lookup table:<br/>die index + frame-in-die → slot/offset]
+        IDX[<b>frame index</b><br/>lookup table:<br/>die index + frame-in-die → slot]
         AGG[<b>result collector</b><br/>one numeric value per frame-in-die position]
     end
     subgraph ACQ[acquisition side]
@@ -68,9 +66,9 @@ flowchart TB
         CN[<b>Compute node</b><br/>per invocation: runs an algo on the frames<br/>at one frame-in-die position across all dies,<br/>returns a numeric value]
     end
     CTRL -- ①<sup>Ⅰ</sup> image one slice --> CAM
-    CAM -- ③<sup>Ⅱ</sup>&nbsp;die&nbsp;index,&nbsp;frame#8209;in#8209;die&nbsp;+&nbsp;slot/offset --> IDX
+    CAM -- ③<sup>Ⅱ</sup>&nbsp;die&nbsp;index,&nbsp;frame#8209;in#8209;die&nbsp;+&nbsp;slot --> IDX
     CTRL -- "④<sup>Ⅲ</sup>&nbsp;process(all&nbsp;frames&nbsp;of&nbsp;one&nbsp;slice):<br/>one&nbsp;invocation&nbsp;per&nbsp;frame#8209;in#8209;die&nbsp;position,<br/>to&nbsp;whichever&nbsp;node&nbsp;is&nbsp;free" --> CN
-    MB -. reads&nbsp;that&nbsp;frame&nbsp;of&nbsp;every&nbsp;die<br/>at&nbsp;the&nbsp;given&nbsp;slot/offsets<sup>Ⅳ</sup> .-> CN
+    MB -. reads&nbsp;that&nbsp;frame&nbsp;of&nbsp;every&nbsp;die<br/>at&nbsp;the&nbsp;given&nbsp;slots<sup>Ⅳ</sup> .-> CN
     CN -- ⑤<sup>Ⅲ</sup>&nbsp;numeric&nbsp;value&nbsp;per&nbsp;position,&nbsp;over&nbsp;network --> AGG
     AGG -- ⑥ results of the slice --> CTRL
 ```
