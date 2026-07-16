@@ -1,41 +1,43 @@
 # Algorithm Controller
 
-Design for the interview question: *"Our tool photographs a wafer slice by slice — [a slice is a
-strip of dies, and each die is captured as several frames](#slice-anatomy). Every picture lands in
-one slot of a shared memory box, and from then on a frame is named by its slot/offset, never
-copied. Design the controller that, one slice at a time, splits the slice's work across a group of
-compute nodes; each invocation runs an algorithm on all the frames that share one frame-in-die
-position (i.e. the same frame position in every die) and returns a single numeric value; the
-controller then gathers those values: one per frame-in-die position, so [dies of six
+Design of a controller that fans one wafer slice's frames out to a group of compute nodes and
+gathers one numeric value per frame-in-die position.
+
+[Problem statement](#problem-statement) · [Derived requirements](#derived-requirements) ·
+[Solution overview](#solution-overview) · [Architecture](#architecture) ·
+[Component APIs](#component-apis) · [Appendix: slice anatomy](#appendix-slice-anatomy)
+
+## Problem statement
+
+The interview question, verbatim: *"Our tool photographs a wafer slice by slice — [a slice is a
+strip of dies, and each die is captured as several frames](#appendix-slice-anatomy). Every picture
+lands in one slot of a shared memory box, and from then on a frame is named by its slot/offset,
+never copied. Design the controller that, one slice at a time, splits the slice's work across a
+group of compute nodes; each invocation runs an algorithm on all the frames that share one
+frame-in-die position (i.e. the same frame position in every die) and returns a single numeric
+value; the controller then gathers those values: one per frame-in-die position, so [dies of six
 frames](#slice-diagram) yield six values for the slice."*
 
-## Requirements
+## Derived requirements
 
-- The wafer is imaged **slice by slice**; a slice contains dies, and each die is imaged as
-  multiple **frames**.
-- Taking a picture writes it into the **memory box**: each slot holds exactly one picture, and a
-  frame is referenced by its **slot/offset** from then on — pixels are never copied around.
-- The imaging side reports back which picture belongs where: **die index + frame-in-die**, mapped
-  to the slot/offset that holds it.
-- The controller processes **all frames of one slice** as a unit before moving to the next slice.
-- A set of **compute nodes** — separate machines — does the work. The unit of work is one
-  invocation: **run an algorithm on all frames that share one frame-in-die position** (i.e. the
-  same frame position in every die of the slice) and return a **single numeric value** for that
-  position. Any node can serve any invocation. Every die is a copy of the same circuit, so one
-  frame-in-die position is the same physical region in every die — the natural input set for
-  comparing that region across dies.
-- The controller collects one numeric value per frame-in-die position — that set of values is the
-  output of processing a slice.
+Constraints the problem statement implies but does not spell out:
 
-## Architecture
+- The acquisition side reports back which picture belongs where: **die index + frame-in-die**,
+  mapped to the slot/offset that holds it.
+- The **compute nodes are separate machines**, and any node can serve any invocation.
+- Every die is a copy of the same circuit, so one frame-in-die position is the same physical
+  region in every die — the natural input set for comparing that region across dies.
 
-**Solution overview.** The system spans several machines: the controller is one process on its own
+## Solution overview
+
+The system spans several machines: the controller is one process on its own
 machine, each compute node is a separate machine, and between them sits the memory box — a
 dedicated bank of picture-sized memory slots that every node can read in parallel over a fast
 link, without going through a filesystem or the controller. The controller works one slice at a
 time. It asks the camera to photograph the slice<sup>①</sup>; each picture is written into a free
 slot of the memory box<sup>②</sup>, and the controller records which die and frame-in-die each
-slot holds<sup>③</sup>. It then orders processing of all frames of the slice<sup>④</sup>: one
+slot holds<sup>③</sup> in its frame index — a lookup table from die index + frame-in-die to
+slot/offset. It then orders processing of all frames of the slice<sup>④</sup>: one
 invocation per frame-in-die position, carrying the slot/offsets of that frame in every die, sent
 to whichever node is free next — so a slow position ties up one machine, not the slice. The node
 pulls those frames straight out of the memory box, runs the algorithm across them — every die is
@@ -44,31 +46,99 @@ returns one number for the position<sup>⑤</sup>. The controller gathers a valu
 position<sup>⑥</sup> and moves on to the next slice. Pixels cross the wire once — from the memory
 box to the one node that processes them; everything else on the network is small messages.
 
+## Architecture
+
+The controller is at the top — commands flow downward (① imaging, ④ invocations), data and
+results flow back up (③ placements, ⑤ values).
+
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 400}}}%%
 flowchart TB
+    subgraph CTRLM[controller machine — one process]
+        CTRL[<b>Controller</b><br/>drives one slice at a time]
+        IDX[<b>frame index</b><br/>lookup table:<br/>die index + frame-in-die → slot/offset]
+        AGG[<b>result collector</b><br/>one numeric value per frame-in-die position]
+    end
     subgraph ACQ[acquisition side]
         CAM[<b>Camera</b><br/>take picture per frame]
         MB[(memory box<br/>dedicated image memory,<br/>one picture per slot)]
-        CAM -- ②&nbsp;picture&nbsp;into&nbsp;free&nbsp;slot --> MB
-    end
-    subgraph CTRLM[controller machine — one process]
-        CTRL[<b>Controller</b><br/>drives one slice at a time]
-        IDX[<b>frame index</b><br/>die index + frame-in-die → slot/offset]
-        AGG[<b>result collector</b><br/>one numeric value per frame-in-die position]
+        CAM -- ②<sup>Ⅴ</sup>&nbsp;picture&nbsp;into&nbsp;free&nbsp;slot --> MB
     end
     subgraph NODES[compute nodes ×N — one machine each]
         CN[<b>Compute node</b><br/>per invocation: runs an algo on the frames<br/>at one frame-in-die position across all dies,<br/>returns a numeric value]
     end
-    CTRL -- ① image one slice --> CAM
-    CAM -- ③&nbsp;die&nbsp;index,&nbsp;frame#8209;in#8209;die&nbsp;+&nbsp;slot/offset --> IDX
-    CTRL -- "④&nbsp;process(all&nbsp;frames&nbsp;of&nbsp;one&nbsp;slice):<br/>one&nbsp;invocation&nbsp;per&nbsp;frame#8209;in#8209;die&nbsp;position,<br/>to&nbsp;whichever&nbsp;node&nbsp;is&nbsp;free" --> CN
-    MB -. reads&nbsp;that&nbsp;frame&nbsp;of&nbsp;every&nbsp;die<br/>at&nbsp;the&nbsp;given&nbsp;slot/offsets .-> CN
-    CN -- ⑤&nbsp;numeric&nbsp;value&nbsp;per&nbsp;position,&nbsp;over&nbsp;network --> AGG
+    CTRL -- ①<sup>Ⅰ</sup> image one slice --> CAM
+    CAM -- ③<sup>Ⅱ</sup>&nbsp;die&nbsp;index,&nbsp;frame#8209;in#8209;die&nbsp;+&nbsp;slot/offset --> IDX
+    CTRL -- "④<sup>Ⅲ</sup>&nbsp;process(all&nbsp;frames&nbsp;of&nbsp;one&nbsp;slice):<br/>one&nbsp;invocation&nbsp;per&nbsp;frame#8209;in#8209;die&nbsp;position,<br/>to&nbsp;whichever&nbsp;node&nbsp;is&nbsp;free" --> CN
+    MB -. reads&nbsp;that&nbsp;frame&nbsp;of&nbsp;every&nbsp;die<br/>at&nbsp;the&nbsp;given&nbsp;slot/offsets<sup>Ⅳ</sup> .-> CN
+    CN -- ⑤<sup>Ⅲ</sup>&nbsp;numeric&nbsp;value&nbsp;per&nbsp;position,&nbsp;over&nbsp;network --> AGG
     AGG -- ⑥ results of the slice --> CTRL
 ```
 
-## Slice anatomy
+## Component APIs
+
+Each numbered arrow in the diagram is one call below, and carries a superscript roman numeral
+(①<sup>Ⅰ</sup>) naming the interface — the code block of the same numeral — it belongs to. Every
+cross-machine call carries only identifiers and numbers; pixels move solely through memory-box
+reads. Step ⑥ has no API — the result collector and the controller share one process.
+
+All interfaces share this vocabulary:
+
+```cpp
+using SliceId    = std::uint64_t;
+using DieIndex   = std::uint32_t;
+using FrameInDie = std::uint32_t; // frame position within a die — the same region in every die
+using SlotOffset = std::uint64_t; // addresses one picture-sized slot of the memory box
+```
+
+### <sup>Ⅰ</sup> Controller → camera (①)
+
+```cpp
+// Starts imaging one slice. Returns immediately; per-frame placements (③) and the
+// completion signal arrive as callbacks while pictures land in the memory box (②).
+void image_slice(SliceId slice);
+```
+
+### <sup>Ⅱ</sup> Camera → controller (③)
+
+```cpp
+// One call per stored picture — adds the frame-index entry (die, frame) → slot.
+void on_frame_stored(SliceId slice, DieIndex die, FrameInDie frame, SlotOffset slot);
+
+// Every frame of the slice is in the memory box; the controller may start dispatching.
+void on_slice_imaged(SliceId slice);
+```
+
+### <sup>Ⅲ</sup> Controller → compute node (④), reply (⑤)
+
+```cpp
+// One invocation, sent to whichever node is free: run the algorithm on the frames at one
+// frame-in-die position — one slot per die, in die order, resolved via the frame index.
+// The reply (⑤) is the single numeric value for that position.
+double process_position(SliceId slice, FrameInDie position,
+                        std::span<const SlotOffset> slots);
+```
+
+### <sup>Ⅳ</sup> Compute node → memory box (dotted read)
+
+```cpp
+// Maps one slot for reading. The view aliases memory-box storage — pixels are not copied.
+std::span<const std::byte> read_frame(SlotOffset slot);
+```
+
+### <sup>Ⅴ</sup> Camera → memory box (②), slot recycling
+
+```cpp
+// Stores one picture into a free slot and returns which slot was chosen —
+// the camera then reports that slot to the controller (③).
+SlotOffset write_picture(std::span<const std::byte> pixels);
+
+// Called by the controller once a slice's results are gathered (⑥), so its
+// slots can hold the next slice's pictures.
+void release_slots(std::span<const SlotOffset> slots);
+```
+
+## Appendix: slice anatomy
 
 How a slice decomposes — the outer box is one slice, a strip of dies, and each die is imaged as a
 grid of frames. The highlighted frames share one frame-in-die position (frame 1 of every die):
