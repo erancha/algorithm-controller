@@ -111,11 +111,48 @@ void on_slice_imaged(SliceId slice);
 
 ```cpp
 // One invocation, sent to whichever node is free: run the algorithm on the frames at one
-// frame-in-die position — one slot per die, in die order, resolved via the frame index.
-// The reply (⑤) is the single numeric value for that position.
+// frame-in-die position. `slots` lists the position's slot number for each die, in die order,
+// resolved via the frame index. The span views only this list of numbers — the slots it names
+// may lie anywhere in the memory box. The reply (⑤) is the single numeric value for that position.
 double process_position(SliceId slice, FrameInDie position,
                         std::span<const SlotOffset> slots);
 ```
+
+**From lookup table to invocation.** Once every placement (③) is in, the frame index is a
+completed table of (die index, frame-in-die) → slot. The controller reads it one position at a
+time: for position `p` it walks the dies in order, looks up each die's slot for `p`, and
+`push_back` appends that slot to the end of a `std::vector<SlotOffset>` — the vector starts empty
+and grows by one entry per die. Traced for position 1 of a three-die slice whose frame index
+holds (die 0, pos 1) → 9, (die 1, pos 1) → 5, (die 2, pos 1) → 106:
+
+```cpp
+std::vector<SlotOffset> slots;                          // starts empty: {}
+for (DieIndex die = 0; die < die_count; ++die)
+    slots.push_back(frame_index.at({die, position}));   // appends that die's slot at the end
+// die 0: at({0, 1}) returns   9 → slots is {9}
+// die 1: at({1, 1}) returns   5 → slots is {9, 5}
+// die 2: at({2, 1}) returns 106 → slots is {9, 5, 106}
+
+process_position(slice, position, slots);               // sends {9, 5, 106} as a span
+```
+
+`std::span` can only view a contiguous sequence, and `std::vector` guarantees contiguous element
+storage by the standard — that pairing is what makes the implicit conversion safe. The contiguity
+applies to the list of slot numbers only; the slots those numbers name are scattered across the
+memory box wherever `write_picture` (Ⅴ) found room:
+
+```
+controller's vector:   [ 9, 5, 106 ]          <- contiguous, the span views this
+                         │  │   │
+memory box:     slot 9 ──┘  │   └───── slot 106
+                (die 0)   slot 5       (die 2)
+                          (die 1)
+```
+
+The span itself never crosses the wire — it is a local pointer + length, meaningless on another
+machine. The RPC layer serializes the vector's few `uint64_t` values into the request; the node's
+stub deserializes them into its own contiguous buffer and presents a fresh span to the handler,
+which then pulls the actual pixels slot by slot via `read_frame` (Ⅳ).
 
 ### <sup>Ⅳ</sup> Compute node → memory box (dotted read)
 
