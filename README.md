@@ -20,8 +20,8 @@ frames](#slice-diagram) yield six values for the slice."*
 
 ## Derived requirements
 
-- The acquisition side reports back which picture belongs where: **die index + frame-in-die**,
-  mapped to the slot that holds it.
+- As each picture lands, the acquisition side reports its placement to the controller: which
+  **die index + frame-in-die** it captures, and the slot that holds it.
 - The **compute nodes are separate machines**, and any node can serve any invocation.
 - Every die is a copy of the same circuit, so one frame-in-die position is the same physical
   region in every die — the natural input set for comparing that region across dies.
@@ -69,7 +69,7 @@ flowchart TB
     CAM -- ③<sup>Ⅱ</sup>&nbsp;die&nbsp;index,&nbsp;frame#8209;in#8209;die&nbsp;+&nbsp;slot --> IDX
     CTRL -- "④<sup>Ⅲ</sup>&nbsp;process(all&nbsp;frames&nbsp;of&nbsp;one&nbsp;slice):<br/>one&nbsp;invocation&nbsp;per&nbsp;frame#8209;in#8209;die&nbsp;position,<br/>to&nbsp;whichever&nbsp;node&nbsp;is&nbsp;free" --> CN
     MB -. reads&nbsp;that&nbsp;frame&nbsp;of&nbsp;every&nbsp;die<br/>at&nbsp;the&nbsp;given&nbsp;slots<sup>Ⅳ</sup> .-> CN
-    CN -- ⑤<sup>Ⅲ</sup>&nbsp;numeric&nbsp;value&nbsp;per&nbsp;position,&nbsp;over&nbsp;network --> AGG
+    CN -- ⑤<sup>Ⅲ</sup>&nbsp;numeric&nbsp;value&nbsp;per&nbsp;position --> AGG
     AGG -- ⑥ results of the slice --> CTRL
 ```
 
