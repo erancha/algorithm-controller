@@ -210,10 +210,10 @@ void release_slots(std::span<const SlotOffset> slots);
 
 ## Appendix: slice anatomy
 
-An example slice: three dies, each imaged as six frames. The highlighted frames share one
-frame-in-die position (frame 1 of every die) — the input set of a single invocation, which
-returns one value for that position. Six positions, so this slice's
-[`process_slice`](#ⅰ-tool-driver--controller-①) reply holds six values.
+An example slice: three dies, each imaged as six frames. Every frame-in-die position groups one
+frame from each die into the input set of a single invocation, which returns one value for that
+position — the highlight shows one such group, frame 1 of every die. Six positions, so this
+slice's [`process_slice`](#ⅰ-tool-driver--controller-①) reply holds six values.
 
 ### One slice diagram
 
