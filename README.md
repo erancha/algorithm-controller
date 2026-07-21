@@ -1,8 +1,8 @@
 # Algorithm Controller
 
-Design of a controller that, one `process_slice` call at a time, fans a wafer slice's frames out
-to a group of compute nodes and returns the gathered results (one numeric value per frame-in-die
-position).
+Design of a controller that, one [`process_slice`](#architecture) call at a time, distributes a
+wafer slice's frames across a group of compute nodes and returns the gathered results (one
+numeric value per frame-in-die position).
 
 [Problem statement](#problem-statement) · [Terminology](#terminology) ·
 [Derived requirements](#derived-requirements) · [Solution overview](#solution-overview) ·
