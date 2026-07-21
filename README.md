@@ -4,9 +4,10 @@ Design of a controller that, one `process_slice` call at a time, fans a wafer sl
 to a group of compute nodes and returns the gathered results (one numeric value per frame-in-die
 position).
 
-[Problem statement](#problem-statement) · [Derived requirements](#derived-requirements) ·
-[Solution overview](#solution-overview) · [Architecture](#architecture) ·
-[Component APIs](#component-apis) · [Appendix: slice anatomy](#appendix-slice-anatomy)
+[Problem statement](#problem-statement) · [Terminology](#terminology) ·
+[Derived requirements](#derived-requirements) · [Solution overview](#solution-overview) ·
+[Architecture](#architecture) · [Component APIs](#component-apis) ·
+[Appendix: slice anatomy](#appendix-slice-anatomy)
 
 ## Problem statement
 
@@ -17,7 +18,17 @@ named by its slot, never copied. The controller, one slice at a time, splits the
 across a group of compute nodes; each invocation runs an algorithm on all the frames that share
 one frame-in-die position (i.e. the same frame position in every die) and returns a single
 numeric value; the controller then gathers those values: one per frame-in-die position, so
-[dies of six frames](#slice-diagram) yield six values for the slice."*
+[dies of six frames](#one-slice-diagram) yield six values for the slice."*
+
+## Terminology
+
+- **die** — one copy of the chip's circuit; a wafer carries many identical dies.
+- **slice** — a strip of dies.
+- **frame** — one camera picture covering part of a die; a die is too large for one shot, so
+  each die is imaged as a [grid of frames](#one-slice-diagram).
+- **frame-in-die position** — a frame's place in that grid.
+- **slot** — one picture-sized cell of the shared memory box, identified by its numeric offset
+  into the box (hence AKA "offset").
 
 ## Derived requirements
 
@@ -41,8 +52,8 @@ whichever node is free, so a long-running invocation ties up one machine, not th
 pulls those frames straight from the memory box, runs the algorithm across them, and returns one
 number for the position as ⑥'s reply; the controller writes each reply into the results vector
 at its position index. It returns that vector as ①'s reply, then releases the slice's
-slots<sup>⑦</sup> for the next slice's pictures. Pixels cross the wire once — from the memory box to the one node that processes them;
-everything else on the network is small messages.
+slots<sup>⑦</sup> for the next slice's pictures. Pixels cross the wire once — from the memory
+box to the one node that processes them; everything else on the network is small messages.
 
 Dispatch deliberately waits for the whole slice before the first invocation. A streaming
 refinement — dispatching each position as soon as its frame has landed in every die — is
@@ -81,14 +92,14 @@ flowchart TB
 
 ## Component APIs
 
-Each solid arrow, thick or thin, is one call below: the roman numeral on its step
-(①<sup>Ⅰ</sup>) names the interface — the code block of the same numeral — and its **bold**
-function heads that block under the same name. A leading `x ⇐` names the call's return value.
-The dotted memory-box read is interface Ⅴ, pulled by a node while serving ⑥; the dotted
-frame-index → controller hop is the in-process lookup composing each ⑥ invocation's slot list —
-its Ⅳa names the walkthrough [from lookup table to invocation](#ⅳa-from-lookup-table-to-invocation). Every
-cross-machine call carries only identifiers and numbers; pixels move solely through memory-box
-reads.
+Two numberings tie the diagram to the code: circled numbers (①–⑦) are the chronological steps,
+one per solid arrow; superscript roman numerals name the code blocks below. So ①<sup>Ⅰ</sup>
+reads "step 1, defined in block Ⅰ" — and the arrow's **bold** function heads that block under
+the same name. A leading `x ⇐` names the call's return value. Dotted arrows carry data, not
+steps: the memory-box read is block Ⅴ, pulled by a node while serving ⑥, and the frame-index →
+controller hop composes each ⑥ invocation's slot list — block Ⅳa,
+[from lookup table to invocation](#ⅳa-from-lookup-table-to-invocation). Every cross-machine
+call carries only identifiers and numbers; pixels move solely through memory-box reads.
 
 Shared vocabulary — [slice anatomy](#appendix-slice-anatomy) visualizes slices, dies and frames:
 
@@ -199,12 +210,12 @@ void release_slots(std::span<const SlotOffset> slots);
 
 ## Appendix: slice anatomy
 
-The outer box is one slice — a strip of dies — and each die is imaged as a grid of frames. The
-highlighted frames share one frame-in-die position (frame 1 of every die): the input set of a
-single invocation, which returns one value for that position. With six frames per die, the
-slice's `process_slice` reply holds six such values.
+An example slice: three dies, each imaged as six frames. The highlighted frames share one
+frame-in-die position (frame 1 of every die) — the input set of a single invocation, which
+returns one value for that position. Six positions, so this slice's
+[`process_slice`](#ⅰ-tool-driver--controller-①) reply holds six values.
 
-### Slice diagram
+### One slice diagram
 
 ```mermaid
 block-beta
@@ -230,8 +241,10 @@ block-beta
             d2f3["frame 3"] d2f4["frame 4"] d2f5["frame 5"]
         end
     end
-    classDef pos fill:#f9d976,stroke:#b8860b,color:#000
+    classDef pos fill:transparent,stroke:#e8a33d,stroke-width:3px
     classDef caption fill:transparent,stroke:transparent
+    classDef slice fill:transparent,stroke:transparent
     class d0f1,d1f1,d2f1 pos
     class d0t,d1t,d2t caption
+    class SLICE slice
 ```
