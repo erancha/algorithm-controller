@@ -43,26 +43,28 @@ numeric value; the controller then gathers those values: one per frame-in-die po
 
 The controller is one process on its own machine; each compute node is a separate process on the
 memory-box machine; between them sits the memory box — a bank of picture-sized slots that every node
-reads in parallel through shared memory, bypassing filesystem and controller. Each `process_slice`
-call<sup>①</sup> hands the controller one slice and returns its results. The controller asks the
-camera to photograph the slice<sup>②</sup>; each picture lands in a free slot<sup>③</sup>, and
-the controller records which die and frame-in-die each slot holds<sup>④</sup> in its frame
-index. Once the camera reports the slice fully imaged<sup>⑤</sup>, the controller dispatches one
-invocation per frame-in-die position<sup>⑥</sup> — carrying that frame's slots, one per die — to
-whichever node is free, so a long-running invocation ties up one node, not the slice. The node
-pulls those frames straight from the memory box, runs the algorithm across them, and returns one
-number for the position as ⑥'s reply; the controller writes each reply into the results vector
-at its position index. It returns that vector as ①'s reply, then releases the slice's
-slots<sup>⑦</sup> for the next slice's pictures. Pixels never cross the wire — each node maps
-the memory box and reads frames in place; everything on the network is small messages.
+reads in parallel through shared memory, bypassing filesystem and controller. 
 
-The controller is never configured with node addresses. Each compute node announces its own
-endpoint to the controller once at startup<sup>Ⅶ</sup>; the pool a slice dispatches across is
-whatever has announced itself, so nodes can be added by just starting them. The inverse also
+**Flow**
+- Each call to [`process_slice`](#architecture) <sup>①</sup> hands the controller one slice and returns its results;
+- The controller asks the camera to photograph the slice: [`image_slice`](#architecture)<sup>②</sup>; 
+- Each picture lands in a free slot<sup>③</sup>, and the controller records which die and frame-in-die each slot holds<sup>④</sup> in its frame index. 
+- Once the camera reports the slice fully imaged: [`on_slice_imaged`](#architecture)<sup>⑤</sup>:
+    - The controller dispatches one invocation per frame-in-die position<sup>⑥</sup> — carrying that frame's slots, 
+      one per die — to whichever compute node is free. 
+    - The node pulls those frames straight from the memory box, runs the algorithm across them, 
+      and returns one number for the position as ⑥'s reply; 
+    - The controller writes each reply into the results vector at its position index. 
+      It returns that vector as ①'s reply, then releases the slice's slots<sup>⑦</sup> for the next slice's pictures. 
+- Note: Pixels never cross the wire — each node maps the memory box and reads frames in place; everything on the network is small messages.
+
+**Compute nodes registration**: The controller is never configured with node addresses. Each compute node announces its own
+endpoint to the controller once at startup<sup>Ⅶ</sup>; the dispatch pool is simply the set of
+nodes that have registered so far, so nodes can be added by just starting them. The inverse also
 holds: a node whose invocation fails or times out is dropped from the pool, so one dead node
 costs at most the slice in flight — never every slice after it — and returns by re-registering.
 
-Dispatch deliberately waits for the whole slice before the first invocation. A streaming
+**Whole-slice dispatch**: Dispatch deliberately waits for the whole slice before the first invocation. A streaming
 refinement — dispatching each position as soon as its frame has landed in every die — is
 sketched in [streaming dispatch](docs/streaming-dispatch.md) and kept out of this design.
 
@@ -82,12 +84,14 @@ flowchart TB
         CTRL[<b>Controller</b><br/>drives one slice at a time,<br/>collects one value per frame-in-die position<br/><i>gRPC service</i>]
         IDX[<b>frame index</b><br/>lookup table:<br/>die index + frame-in-die → slot]
     end
-    subgraph ACQ[acquisition side]
-        CAM[<b>Camera</b><br/>take picture per frame<br/><i>gRPC service</i>]
-        MB[(memory box<br/>dedicated image memory,<br/>one picture per slot<br/><i>pixels: shared memory<br/>slot bookkeeping: gRPC</i>)]
-    end
-    subgraph NODES[compute nodes ×N — one process each, on the memory-box machine]
-        CN[<b>Compute node</b><br/>per invocation: runs an algo on the frames<br/>at one frame-in-die position across all dies,<br/>returns a numeric value<br/><i>gRPC service</i>]
+    subgraph MBM[memory-box machine — every process on it maps the box's shared memory]
+        subgraph ACQ[acquisition side]
+            CAM[<b>Camera</b><br/>take picture per frame<br/><i>gRPC service</i>]
+            MB[(memory box<br/>dedicated image memory,<br/>one picture per slot<br/><i>pixels: shared memory<br/>slot bookkeeping: gRPC</i>)]
+        end
+        subgraph NODES[compute nodes ×N — one process each]
+            CN[<b>Compute node</b><br/>per invocation: runs an algo on the frames<br/>at one frame-in-die position across all dies,<br/>returns a numeric value<br/><i>gRPC service</i>]
+        end
     end
     DRV == "①<sup>Ⅰ</sup>&nbsp;slice&nbsp;results&nbsp;⇐&nbsp;<b>process_slice</b>(slice&nbsp;id)" ==> CTRL
     CTRL -- "②<sup>Ⅱ</sup>&nbsp;<b>image_slice</b>" --> CAM
