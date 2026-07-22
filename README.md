@@ -34,26 +34,27 @@ numeric value; the controller then gathers those values: one per frame-in-die po
 
 - As each picture lands, the acquisition side reports its placement to the controller: which
   **die index + frame-in-die** it captures, and the slot that holds it.
-- The **compute nodes are separate machines**, and any node can serve any invocation.
+- The **compute nodes are separate processes** on the memory-box machine, and any node can
+  serve any invocation.
 - Dies are copies of one circuit, so a frame-in-die position is the same physical region in
   every die — the natural input set for cross-die comparison.
 
 ## Solution overview
 
-The controller is one process on its own machine; each compute node is a separate machine;
-between them sits the memory box — a bank of picture-sized slots that every node reads in
-parallel over a fast link, bypassing filesystem and controller. Each `process_slice`
+The controller is one process on its own machine; each compute node is a separate process on the
+memory-box machine; between them sits the memory box — a bank of picture-sized slots that every node
+reads in parallel through shared memory, bypassing filesystem and controller. Each `process_slice`
 call<sup>①</sup> hands the controller one slice and returns its results. The controller asks the
 camera to photograph the slice<sup>②</sup>; each picture lands in a free slot<sup>③</sup>, and
 the controller records which die and frame-in-die each slot holds<sup>④</sup> in its frame
 index. Once the camera reports the slice fully imaged<sup>⑤</sup>, the controller dispatches one
 invocation per frame-in-die position<sup>⑥</sup> — carrying that frame's slots, one per die — to
-whichever node is free, so a long-running invocation ties up one machine, not the slice. The node
+whichever node is free, so a long-running invocation ties up one node, not the slice. The node
 pulls those frames straight from the memory box, runs the algorithm across them, and returns one
 number for the position as ⑥'s reply; the controller writes each reply into the results vector
 at its position index. It returns that vector as ①'s reply, then releases the slice's
-slots<sup>⑦</sup> for the next slice's pictures. Pixels cross the wire once — from the memory
-box to the one node that processes them; everything else on the network is small messages.
+slots<sup>⑦</sup> for the next slice's pictures. Pixels never cross the wire — each node maps
+the memory box and reads frames in place; everything on the network is small messages.
 
 The controller is never configured with node addresses. Each compute node announces its own
 endpoint to the controller once at startup<sup>Ⅶ</sup>; the pool a slice dispatches across is
@@ -85,7 +86,7 @@ flowchart TB
         CAM[<b>Camera</b><br/>take picture per frame<br/><i>gRPC service</i>]
         MB[(memory box<br/>dedicated image memory,<br/>one picture per slot<br/><i>pixels: shared memory<br/>slot bookkeeping: gRPC</i>)]
     end
-    subgraph NODES[compute nodes ×N — one machine each]
+    subgraph NODES[compute nodes ×N — one process each, on the memory-box machine]
         CN[<b>Compute node</b><br/>per invocation: runs an algo on the frames<br/>at one frame-in-die position across all dies,<br/>returns a numeric value<br/><i>gRPC service</i>]
     end
     DRV == "①<sup>Ⅰ</sup>&nbsp;slice&nbsp;results&nbsp;⇐&nbsp;<b>process_slice</b>(slice&nbsp;id)" ==> CTRL
