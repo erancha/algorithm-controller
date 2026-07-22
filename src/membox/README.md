@@ -19,7 +19,10 @@ Every call in `Membox` (`write_frame`, `read_frame`, `release_slots`) picks one 
 `membox-manager` creates the POSIX shm segment at startup, sized `slots × frame_bytes` (its
 `--slots` and `--frame-bytes` flags); every other process opens the same segment name read-only
 (compute nodes, controller) or read-write (camera). A fresh `create` first unlinks any stale
-segment of the same name, so a restart never inherits a previous run's mapping.
+segment of the same name, so a restart never inherits a previous run's mapping. The manager
+converts SIGTERM/SIGINT into a graceful server shutdown so the segment's owning destructor runs
+and unlinks it — a killed manager would otherwise leave the segment pinned in `/dev/shm`, which
+at production frame sizes holds gigabytes of RAM until the next run reclaims the name.
 
 ## Backend abstraction
 
