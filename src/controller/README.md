@@ -67,4 +67,8 @@ stalled node and a crashed node end the same way, as a bounded error.
 
 `--listen addr` (default `localhost:50052`), `--camera addr` (default `localhost:50051`),
 `--manager addr` (default `localhost:50050`), `--shm name` (default `/algctl-membox`),
-`--frame-bytes N` (default 65536).
+`--frame-bytes N` (default 65536), `--camera-stream-deadline-s N` (default 300) and
+`--position-deadline-s N` (default 60) — the two internal deadlines scale with frame size, since
+a position's compute cost grows with its pixel count; `scripts/start.sh` derives both from
+`--frame-dim`. The driver's overall `--deadline-s` must stay above them so the controller's more
+specific diagnoses fire first.

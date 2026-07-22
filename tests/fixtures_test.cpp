@@ -40,3 +40,16 @@ TEST(Fixtures, GeneratesTreeManifestAndVisibleDefect) {
   manifest >> word;
   EXPECT_EQ(word, "defect");
 }
+
+TEST(Fixtures, RejectsDefectOutsideFrameGeometry) {
+  Geometry g{.frames_per_die = 4, .frame_width = 64, .frame_height = 64};
+  fs::path root = fs::temp_directory_path() / "algctl-fixtures-bounds-test";
+  fs::remove_all(root);
+  std::uint32_t dies[] = {1};
+
+  Defect clipped[] = {{.die = 0, .frame_in_die = 0, .x = 62, .y = 30, .radius = 5, .delta = 90}};
+  EXPECT_THROW(generate_fixtures(root, g, dies, clipped), std::invalid_argument);
+
+  Defect late[] = {{.die = 0, .frame_in_die = 4, .x = 30, .y = 30, .radius = 5, .delta = 90}};
+  EXPECT_THROW(generate_fixtures(root, g, dies, late), std::invalid_argument);
+}

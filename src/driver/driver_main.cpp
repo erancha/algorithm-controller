@@ -13,9 +13,11 @@ using namespace inspection;
 int main(int argc, char** argv) {
   std::string controller = "localhost:50052";
   std::uint64_t slice = 0;
+  std::size_t deadline_s = 600;
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     if (a == "--controller") controller = flag_value(argc, argv, i);
+    else if (a == "--deadline-s") deadline_s = flag_size(argc, argv, i);
     else if (a == "--slice") {
       try {
         slice = std::stoull(flag_value(argc, argv, i));
@@ -29,10 +31,11 @@ int main(int argc, char** argv) {
   auto stub = v1::Controller::NewStub(
       grpc::CreateChannel(controller, grpc::InsecureChannelCredentials()));
   grpc::ClientContext ctx;
-  // Comfortably above the controller's own internal deadlines (5 min camera
-  // stream + 1 min per position), so those fire first with better diagnoses;
-  // this bound only catches a hung controller itself.
-  ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::minutes(10));
+  // Must stay comfortably above the controller's own internal deadlines
+  // (camera stream + per-position), so those fire first with better
+  // diagnoses; this bound only catches a hung controller itself. Launchers
+  // that raise the controller's deadlines must raise this one to match.
+  ctx.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(deadline_s));
   v1::SliceRequest req;
   req.set_slice_id(slice);
   v1::SliceResults results;

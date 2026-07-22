@@ -1,4 +1,6 @@
 #include <grpcpp/grpcpp.h>
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <sstream>
@@ -42,6 +44,8 @@ int main(int argc, char** argv) {
     else if (a == "--frame-rate") frame_rate = parse_frame_rate(flag_value(argc, argv, i));
     else if (a == "--frame-bytes") frame_bytes = flag_size(argc, argv, i);
     else if (a == "--die-counts") die_counts = flag_value(argc, argv, i);
+    else if (a == "--frame-dim")
+      g.frame_width = g.frame_height = static_cast<std::uint32_t>(flag_size(argc, argv, i));
     else if (a == "--frames-per-die")
       g.frames_per_die = static_cast<std::uint32_t>(flag_size(argc, argv, i));
     else { std::fprintf(stderr, "unknown flag %s\n", a.c_str()); return 2; }
@@ -51,11 +55,22 @@ int main(int argc, char** argv) {
     std::vector<std::uint32_t> dies;
     std::stringstream ss(die_counts);
     for (std::string part; std::getline(ss, part, ',');) dies.push_back(std::stoul(part));
-    // Two seeded defects at distinct positions — the integration test's ground truth.
+    // Two seeded defects at distinct positions — the integration test's ground
+    // truth. Coordinates and radii describe the default 256×256 geometry and
+    // scale with the dimension: a larger frame images the same physical die at
+    // finer pixel pitch, so the defect's share of the frame's pixels — and its
+    // score contribution — stays resolution-independent.
     std::vector<Defect> defects = {
         {.die = 3, .frame_in_die = 7, .x = 100, .y = 120, .radius = 6, .delta = 90},
         {.die = 11, .frame_in_die = 19, .x = 40, .y = 200, .radius = 4, .delta = -70},
     };
+    const double scale = g.frame_width / 256.0;
+    for (auto& d : defects) {
+      d.x = static_cast<std::uint32_t>(std::lround(d.x * scale));
+      d.y = static_cast<std::uint32_t>(std::lround(d.y * scale));
+      d.radius = std::max<std::uint32_t>(
+          1, static_cast<std::uint32_t>(std::lround(d.radius * scale)));
+    }
     generate_fixtures(fixtures, g, dies, defects);
     std::printf("generated %zu slice(s) under %s\n", dies.size(), fixtures.c_str());
     return 0;

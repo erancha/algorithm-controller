@@ -28,8 +28,12 @@ fixtures/manifest.txt
 Each frame file is binary PGM (P5) — trivial to write and read with no image library, and
 viewable in any standard tool (`src/common/pgm.hpp`). `--die-counts` (comma-separated, e.g.
 `20,12` for two slices — the default is a single 20-die slice) gives each generated slice its die
-count; `--frames-per-die` (default 24) and the frame dimensions (256×256, 8-bit) are geometry
-shared with `membox-manager`'s `--frame-bytes` sizing (256×256 = 65536 bytes = the 64 KB default).
+count; `--frames-per-die` (default 24) and `--frame-dim` (frame edge in 8-bit pixels, default 256)
+are geometry shared with `membox-manager`'s `--frame-bytes` sizing (256×256 = 65536 bytes = the
+64 KB default; `--frame-dim 4096` = 16 MiB frames). Generation refuses geometry that cannot fully
+render every seeded defect — a defect falling outside the frames would silently disappear from the
+ground truth the integration checks rely on. `scripts/start.sh --frame-dim N` derives all of this
+from the one value, caching each dimension's fixtures in its own directory.
 
 ## `manifest.txt` line format
 

@@ -11,6 +11,7 @@ int main(int argc, char** argv) {
   std::string manager = "localhost:50050";
   std::string shm = "/algctl-membox";
   std::size_t frame_bytes = 65536;
+  ControllerService::Timing timing;
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     if (a == "--listen") listen = flag_value(argc, argv, i);
@@ -18,12 +19,16 @@ int main(int argc, char** argv) {
     else if (a == "--manager") manager = flag_value(argc, argv, i);
     else if (a == "--shm") shm = flag_value(argc, argv, i);
     else if (a == "--frame-bytes") frame_bytes = flag_size(argc, argv, i);
+    else if (a == "--camera-stream-deadline-s")
+      timing.camera_stream_deadline = std::chrono::seconds(flag_size(argc, argv, i));
+    else if (a == "--position-deadline-s")
+      timing.position_deadline = std::chrono::seconds(flag_size(argc, argv, i));
     else { std::fprintf(stderr, "unknown flag %s\n", a.c_str()); return 2; }
   }
   auto mgr_channel = grpc::CreateChannel(manager, grpc::InsecureChannelCredentials());
   Membox box(mgr_channel, ShmSegment::open_existing(shm, /*writable=*/false), frame_bytes);
   ControllerService service(
-      grpc::CreateChannel(camera, grpc::InsecureChannelCredentials()), box);
+      grpc::CreateChannel(camera, grpc::InsecureChannelCredentials()), box, timing);
   grpc::ServerBuilder b;
   b.AddListeningPort(listen, grpc::InsecureServerCredentials());
   b.RegisterService(&service);

@@ -26,6 +26,16 @@ std::vector<std::uint8_t> circuit_pattern(std::uint32_t frame_in_die, const Geom
 void generate_fixtures(const std::filesystem::path& root, const Geometry& g,
                        std::span<const std::uint32_t> dies_per_slice,
                        std::span<const Defect> defects) {
+  // A defect the geometry cannot fully render would silently vanish from the
+  // fixtures while tests still expect it as ground truth.
+  for (const auto& d : defects) {
+    if (d.frame_in_die >= g.frames_per_die || d.x < d.radius || d.y < d.radius ||
+        d.x + d.radius >= g.frame_width || d.y + d.radius >= g.frame_height)
+      throw std::invalid_argument(
+          "defect at frame " + std::to_string(d.frame_in_die) + ", (" + std::to_string(d.x) +
+          "," + std::to_string(d.y) + ") r" + std::to_string(d.radius) +
+          " does not fit the frame geometry");
+  }
   std::filesystem::create_directories(root);
   for (std::uint32_t slice = 0; slice < dies_per_slice.size(); ++slice) {
     for (std::uint32_t die = 0; die < dies_per_slice[slice]; ++die) {
