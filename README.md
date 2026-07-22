@@ -7,7 +7,7 @@ numeric value per frame-in-die position).
 [Problem statement](#problem-statement) · [Terminology](#terminology) ·
 [Derived requirements](#derived-requirements) · [Solution overview](#solution-overview) ·
 [Architecture](#architecture) · [Component APIs](#component-apis) ·
-[Appendix: slice anatomy](#appendix-slice-anatomy)
+[Implementation](docs/implementation/README.md) · [Appendix: slice anatomy](#appendix-slice-anatomy)
 
 ## Problem statement
 
@@ -55,6 +55,12 @@ at its position index. It returns that vector as ①'s reply, then releases the 
 slots<sup>⑦</sup> for the next slice's pictures. Pixels cross the wire once — from the memory
 box to the one node that processes them; everything else on the network is small messages.
 
+The controller is never configured with node addresses. Each compute node announces its own
+endpoint to the controller once at startup<sup>Ⅶ</sup>; the pool a slice dispatches across is
+whatever has announced itself, so nodes can be added by just starting them. The inverse also
+holds: a node whose invocation fails or times out is dropped from the pool, so one dead node
+costs at most the slice in flight — never every slice after it — and returns by re-registering.
+
 Dispatch deliberately waits for the whole slice before the first invocation. A streaming
 refinement — dispatching each position as soon as its frame has landed in every die — is
 sketched in [streaming dispatch](docs/streaming-dispatch.md) and kept out of this design.
@@ -62,30 +68,34 @@ sketched in [streaming dispatch](docs/streaming-dispatch.md) and kept out of thi
 ## Architecture
 
 Arrow shape encodes call semantics: **thick** — synchronous request/reply; **thin** — one-way
-asynchronous message; **dotted** — data flow, not a command.
+asynchronous message; **dotted** — data flow, not a command. Solid arrows travel over gRPC, with
+one carve-out: ③'s pixel payload lands in the memory box through shared memory — only its slot
+bookkeeping is a gRPC call — and the dotted read (Ⅴ) is pure shared memory, so pixels never
+cross gRPC.
 
 ```mermaid
 %%{init: {"flowchart": {"wrappingWidth": 400}}}%%
 flowchart TB
     DRV[<b>Tool driver</b><br/>whatever runs the tool,<br/>one slice at a time]
     subgraph CTRLM[controller machine — one process]
-        CTRL[<b>Controller</b><br/>drives one slice at a time,<br/>collects one value per frame-in-die position]
+        CTRL[<b>Controller</b><br/>drives one slice at a time,<br/>collects one value per frame-in-die position<br/><i>gRPC service</i>]
         IDX[<b>frame index</b><br/>lookup table:<br/>die index + frame-in-die → slot]
     end
     subgraph ACQ[acquisition side]
-        CAM[<b>Camera</b><br/>take picture per frame]
-        MB[(memory box<br/>dedicated image memory,<br/>one picture per slot)]
+        CAM[<b>Camera</b><br/>take picture per frame<br/><i>gRPC service</i>]
+        MB[(memory box<br/>dedicated image memory,<br/>one picture per slot<br/><i>pixels: shared memory<br/>slot bookkeeping: gRPC</i>)]
     end
     subgraph NODES[compute nodes ×N — one machine each]
-        CN[<b>Compute node</b><br/>per invocation: runs an algo on the frames<br/>at one frame-in-die position across all dies,<br/>returns a numeric value]
+        CN[<b>Compute node</b><br/>per invocation: runs an algo on the frames<br/>at one frame-in-die position across all dies,<br/>returns a numeric value<br/><i>gRPC service</i>]
     end
     DRV == "①<sup>Ⅰ</sup>&nbsp;slice&nbsp;results&nbsp;⇐&nbsp;<b>process_slice</b>(slice&nbsp;id)" ==> CTRL
     CTRL -- "②<sup>Ⅱ</sup>&nbsp;<b>image_slice</b>" --> CAM
-    CAM == "③<sup>Ⅵ</sup>&nbsp;<b>write_picture</b>&nbsp;into&nbsp;a&nbsp;free&nbsp;slot" ==> MB
+    CAM == "③<sup>Ⅵ</sup>&nbsp;<b>write_frame</b>&nbsp;into&nbsp;a&nbsp;free&nbsp;slot" ==> MB
     CAM -- "④<sup>Ⅲ</sup>&nbsp;<b>on_frame_stored</b>:&nbsp;die&nbsp;index,&nbsp;frame#8209;in#8209;die&nbsp;+&nbsp;slot" --> IDX
     CAM -- "⑤<sup>Ⅲ</sup>&nbsp;<b>on_slice_imaged</b>&nbsp;once&nbsp;all&nbsp;landed" --> CTRL
     IDX -. "each&nbsp;position's&nbsp;slots,&nbsp;in&nbsp;die&nbsp;order<sup>Ⅳa</sup>" .-> CTRL
     CTRL == "⑥<sup>Ⅳ</sup>&nbsp;value&nbsp;⇐&nbsp;<b>process_position</b>:&nbsp;one&nbsp;invocation<br/>per&nbsp;frame#8209;in#8209;die&nbsp;position,<br/>to&nbsp;whichever&nbsp;node&nbsp;is&nbsp;free" ==> CN
+    CN == "<b>register_node</b><sup>Ⅶ</sup>(own&nbsp;endpoint),<br/>once&nbsp;at&nbsp;node&nbsp;startup" ==> CTRL
     MB -. "<b>read_frame</b><sup>Ⅴ</sup>:&nbsp;one&nbsp;frame,&nbsp;by&nbsp;its&nbsp;slot" .-> CN
     CTRL -- "⑦<sup>Ⅵ</sup>&nbsp;<b>release_slots</b>" --> MB
 ```
@@ -98,8 +108,11 @@ reads "step 1, defined in block Ⅰ" — and the arrow's **bold** function heads
 the same name. A leading `x ⇐` names the call's return value. Dotted arrows carry data, not
 steps: the memory-box read is block Ⅴ, pulled by a node while serving ⑥, and the frame-index →
 controller hop composes each ⑥ invocation's slot list — block Ⅳa,
-[from lookup table to invocation](#ⅳa-from-lookup-table-to-invocation). Every cross-machine
-call carries only identifiers and numbers; pixels move solely through memory-box reads.
+[from lookup table to invocation](#ⅳa-from-lookup-table-to-invocation). One solid arrow also
+carries no step number: registration (Ⅶ) happens once per node at startup, before any slice
+exists, so it sits outside the ①–⑦ cycle. Every cross-machine call carries only identifiers
+and numbers, and every call carries a deadline — a stalled peer surfaces as an error, never as
+a hang. Pixels move solely through memory-box reads.
 
 Shared vocabulary — [slice anatomy](#appendix-slice-anatomy) visualizes slices, dies and frames:
 
@@ -173,7 +186,7 @@ process_position(slice, position, slots);               // sends {9, 5, 106} as 
 `std::span` can only view a contiguous sequence, and `std::vector` guarantees contiguous element
 storage by the standard — that pairing is what makes the implicit conversion safe. The contiguity
 applies to the list of slot numbers only; the slots those numbers name are scattered across the
-memory box wherever `write_picture` (Ⅵ) found room:
+memory box wherever `write_frame` (Ⅵ) found room:
 
 ```
 controller's vector:   [ 9, 5, 106 ]          <- contiguous, the span views this
@@ -201,11 +214,23 @@ std::span<const std::byte> read_frame(SlotOffset slot);
 ```cpp
 // Stores one picture into a free slot and returns which slot was chosen —
 // the camera then reports that slot to the controller (④).
-SlotOffset write_picture(std::span<const std::byte> pixels);
+SlotOffset write_frame(std::span<const std::byte> pixels);
 
 // Called by the controller once a slice's results are gathered, so its
 // slots can hold the next slice's pictures.
 void release_slots(std::span<const SlotOffset> slots);
+```
+
+### <sup>Ⅶ</sup> Compute node → controller (registration)
+
+```cpp
+// Announces this node to the controller, once at node startup: endpoint is the address the
+// controller dials back for process_position (⑥) invocations. Registering the same endpoint
+// again replaces its connection (a restarted node) rather than growing the pool. Returns once
+// the controller has recorded the node, so a successfully started node is dispatchable.
+// The controller drops a node whose ⑥ invocation fails or times out; registering again is
+// also how such a node rejoins.
+void register_node(const std::string& endpoint);
 ```
 
 ## Appendix: slice anatomy
@@ -214,6 +239,11 @@ An example slice: three dies, each imaged as six frames. Every frame-in-die posi
 frame from each die into the input set of a single invocation, which returns one value for that
 position — the highlight shows one such group, frame 1 of every die. Six positions, so this
 slice's [`process_slice`](#ⅰ-tool-driver--controller-①) reply holds six values.
+
+The diagram is a miniature. At a realistic scale, a 4096×4096 8-bit sensor makes each frame
+16 MB; with a 2 mm field of view a 10 mm die is a 5×5 grid of 25 frames, and a 20-die slice
+fills ~8 GB of the memory box — the load that motivates dedicated image memory and pixels
+crossing the wire only once.
 
 ### One slice diagram
 

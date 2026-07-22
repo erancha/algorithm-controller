@@ -1,0 +1,5 @@
+build/
+fixtures/
+.superpowers/
+docs/superpowers/
+docs/senior-code-eval-*

@@ -1,0 +1,4 @@
+{
+  "name": "algorithm-controller",
+  "dependencies": [ "grpc", "protobuf", "gtest" ]
+}

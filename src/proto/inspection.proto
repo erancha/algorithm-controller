@@ -1,0 +1,29 @@
+syntax = "proto3";
+package inspection.v1;
+
+message SliceRequest  { uint64 slice_id = 1; }
+message SliceResults  { repeated double values = 1; }  // index = frame-in-die position
+
+message FrameStored   { uint32 die = 1; uint32 frame_in_die = 2; uint64 slot = 3; }
+
+message PositionRequest { uint64 slice_id = 1; uint32 frame_in_die = 2; repeated uint64 slots = 3; }
+message PositionValue   { double value = 1; }
+
+message AllocRequest   {}
+message SlotReply      { uint64 slot = 1; }
+message ReleaseRequest { repeated uint64 slots = 1; }
+message Nothing        {}
+
+// Address the controller should dial back for ProcessPosition calls.
+message NodeEndpoint   { string endpoint = 1; }
+
+service Controller    {
+  rpc ProcessSlice(SliceRequest) returns (SliceResults);
+  rpc RegisterNode(NodeEndpoint) returns (Nothing);
+}
+service Camera        { rpc ImageSlice(SliceRequest) returns (stream FrameStored); }
+service ComputeNode   { rpc ProcessPosition(PositionRequest) returns (PositionValue); }
+service MemboxManager {
+  rpc AllocSlot(AllocRequest) returns (SlotReply);
+  rpc ReleaseSlots(ReleaseRequest) returns (Nothing);
+}
