@@ -11,8 +11,9 @@ entry point: images a slice, builds the frame index from the placement stream, d
 The controller takes no node addresses. Each compute node calls `RegisterNode` with its own
 endpoint at startup; the controller dials a channel back to that endpoint and adds it to a
 mutex-guarded pool keyed by endpoint, so re-registering (a restarted node) replaces the
-connection instead of duplicating the entry. A slice snapshots the pool when it starts; nodes
-registering mid-slice join from the next slice on. An arriving slice with an empty pool waits up
+connection instead of duplicating the entry. Dispatch reads the live pool at every checkout
+([Ⅳa](#ⅳa-free-node-dispatch-from-the-live-pool)), so a node registering mid-slice starts
+serving the slice in flight. An arriving slice with an empty pool waits up
 to 10 s for the first registration — nodes and controller launch concurrently, so "no node has
 registered yet" is a legal startup state, bounded rather than absorbed — then fails with
 `FAILED_PRECONDITION, "no compute nodes registered"`.
@@ -20,7 +21,7 @@ registered yet" is a legal startup state, bounded rather than absorbed — then 
 Eviction is registration's inverse: a node whose `ProcessPosition` call fails or times out is
 removed from the pool, so a dead or stalled node costs the slice in flight, never every slice
 after it. A restarted node re-registers and returns. Eviction is skipped when the endpoint
-re-registered after the slice's snapshot was taken — the pool then holds a fresh connection the
+re-registered after the failed call checked it out — the pool then holds a fresh connection the
 observed failure says nothing about.
 
 ## Building the frame index from the ④ stream
