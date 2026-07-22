@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <grpcpp/grpcpp.h>
+#include <atomic>
 #include <chrono>
 #include <string>
 #include <thread>
@@ -30,15 +31,24 @@ class FakeCamera final : public v1::Camera::Service {
 
 // A node whose reply encodes both slot identity and die order, so the test
 // can verify the exact slot list (not just its size) dispatched per position.
+// served counts invocations, and a nonzero hold keeps each invocation in
+// flight long enough for distribution tests to force overlapping dispatch.
 class FakeNode final : public v1::ComputeNode::Service {
  public:
+  explicit FakeNode(std::chrono::milliseconds hold = {}) : hold_(hold) {}
   grpc::Status ProcessPosition(grpc::ServerContext*, const v1::PositionRequest* req,
                                v1::PositionValue* reply) override {
+    ++served;
+    if (hold_.count() > 0) std::this_thread::sleep_for(hold_);
     double v = 10000.0 * req->frame_in_die();
     for (int d = 0; d < req->slots_size(); ++d) v += double(req->slots(d)) * (d + 1);
     reply->set_value(v);
     return grpc::Status::OK;
   }
+  std::atomic<int> served{0};
+
+ private:
+  std::chrono::milliseconds hold_;
 };
 
 // A node that always fails, used to verify that a node failure aborts the
@@ -141,6 +151,45 @@ TEST(ControllerService, GathersOneValuePerPositionAndReleasesSlots) {
 
   // All six slots were released — the manager's pool is full again.
   for (int i = 0; i < 6; ++i) EXPECT_NO_THROW(box.write_frame(px));
+
+  ctrl_server->Shutdown(); nb_server->Shutdown(); na_server->Shutdown();
+  cam_server->Shutdown(); mgr_server->Shutdown();
+}
+
+TEST(ControllerService, DistributesPositionsAcrossFreeNodes) {
+  const std::size_t frame_bytes = 64;
+  ManagerService manager(8, frame_bytes);
+  auto segment = ShmSegment::create("/algctl-ctrl-test-dist", 8 * frame_bytes);
+  auto [mgr_server, mgr_channel, mgr_ep] = serve(manager);
+  Membox box(mgr_channel, ShmSegment::open_existing("/algctl-ctrl-test-dist", true), frame_bytes);
+
+  std::vector<std::byte> px(frame_bytes, std::byte{0});
+  std::vector<v1::FrameStored> frames;
+  for (std::uint32_t p = 0; p < 8; ++p) frames.push_back(fs(0, p, box.write_frame(px)));
+  FakeCamera camera(frames);
+  auto [cam_server, cam_channel, cam_ep] = serve(camera);
+
+  // Each invocation is held in flight, so consecutive positions must check
+  // out different nodes — dispatch frozen on one node would leave the other
+  // at zero served.
+  FakeNode node_a(std::chrono::milliseconds(50)), node_b(std::chrono::milliseconds(50));
+  auto [na_server, na_channel, na_ep] = serve(node_a);
+  auto [nb_server, nb_channel, nb_ep] = serve(node_b);
+
+  ControllerService controller(cam_channel, box);
+  register_node(controller, na_ep);
+  register_node(controller, nb_ep);
+  auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
+  auto stub = v1::Controller::NewStub(ctrl_channel);
+
+  grpc::ClientContext ctx;
+  v1::SliceRequest req;
+  req.set_slice_id(0);
+  v1::SliceResults results;
+  ASSERT_TRUE(stub->ProcessSlice(&ctx, req, &results).ok());
+  ASSERT_EQ(results.values_size(), 8);
+  EXPECT_GT(node_a.served.load(), 0);
+  EXPECT_GT(node_b.served.load(), 0);
 
   ctrl_server->Shutdown(); nb_server->Shutdown(); na_server->Shutdown();
   cam_server->Shutdown(); mgr_server->Shutdown();

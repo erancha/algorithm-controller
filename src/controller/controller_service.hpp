@@ -1,11 +1,13 @@
 #pragma once
 #include <grpcpp/grpcpp.h>
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -15,13 +17,15 @@
 namespace inspection {
 
 // Serves ProcessSlice (①): images the slice (②), builds the frame index from
-// the ④ stream, dispatches one invocation per position (⑥) across the node
-// pool, gathers replies at their position index, and releases the slice's
+// the ④ stream, dispatches one invocation per position (⑥) to whichever node
+// is free, gathers replies at their position index, and releases the slice's
 // slots (⑦). Die count and position count are derived from the stream, never
 // configured. The node pool is filled by RegisterNode (Ⅶ): each compute node
 // announces its own endpoint at startup, so the controller is never
-// configured with node addresses. A node whose invocation fails or times out
-// is evicted from the pool — the slice aborts, but later slices no longer
+// configured with node addresses. Every checkout reads the live pool, so a
+// node that registers while a slice is already dispatching starts receiving
+// positions immediately. A node whose invocation fails or times out is
+// evicted from the pool — the slice aborts, but later slices no longer
 // dispatch to it; re-registering (a restarted node) restores it.
 class ControllerService final : public v1::Controller::Service {
  public:
@@ -54,8 +58,10 @@ class ControllerService final : public v1::Controller::Service {
     {
       std::lock_guard lock(nodes_mu_);
       // Re-registering an endpoint replaces its connection (node restart),
-      // never grows the pool.
-      nodes_.insert_or_assign(req->endpoint(), std::move(stub));
+      // never grows the pool. The fresh entry starts free even if the old
+      // one was mid-call — that call belongs to a connection this entry no
+      // longer represents.
+      nodes_.insert_or_assign(req->endpoint(), NodeEntry{std::move(stub), false});
     }
     nodes_cv_.notify_all();
     std::cout << "node registered: " << req->endpoint() << std::endl;
@@ -69,15 +75,13 @@ class ControllerService final : public v1::Controller::Service {
 
   grpc::Status ProcessSlice(grpc::ServerContext*, const v1::SliceRequest* req,
                             v1::SliceResults* results) override {
-    // Snapshot the pool for this slice; shared_ptr copies keep each stub alive
-    // even if its endpoint re-registers or is evicted mid-slice.
-    std::vector<std::pair<std::string, std::shared_ptr<v1::ComputeNode::Stub>>> nodes;
+    // Startup barrier only — dispatch below always reads the live pool, so
+    // nodes registering after this point still join the slice.
     {
       std::unique_lock lock(nodes_mu_);
       nodes_cv_.wait_for(lock, timing_.first_node_wait, [this] { return !nodes_.empty(); });
       if (nodes_.empty())
         return {grpc::StatusCode::FAILED_PRECONDITION, "no compute nodes registered"};
-      for (const auto& [endpoint, stub] : nodes_) nodes.emplace_back(endpoint, stub);
     }
 
     // ② + ④ + ⑤ — one streaming call fills the frame index.
@@ -127,41 +131,51 @@ class ControllerService final : public v1::Controller::Service {
       for (std::uint32_t die = 0; die < dies; ++die)
         slot_lists[pos].push_back(frame_index.at({die, pos}));
 
-    // ⑥ — one worker per node, each keeping one invocation in flight.
+    // ⑥ — dispatch each position to whichever node is free. Checkout blocks
+    // while every node is busy, which bounds the in-flight invocations to the
+    // pool size while letting mid-slice registrations add concurrency.
     std::vector<double> values(positions, 0.0);
     std::mutex mu;
-    std::uint32_t next_pos = 0;
     grpc::Status first_error = grpc::Status::OK;
-    std::vector<std::thread> workers;
-    for (auto& node : nodes) {
-      workers.emplace_back([&, &endpoint = node.first, &stub = node.second] {
-        for (;;) {
-          std::uint32_t pos;
-          {
-            std::lock_guard lock(mu);
-            if (next_pos >= positions || !first_error.ok()) return;
-            pos = next_pos++;
-          }
-          v1::PositionRequest preq;
-          preq.set_slice_id(req->slice_id());
-          preq.set_frame_in_die(pos);
-          for (auto s : slot_lists[pos]) preq.add_slots(s);
-          grpc::ClientContext ctx;
-          ctx.set_deadline(std::chrono::system_clock::now() + timing_.position_deadline);
-          v1::PositionValue reply;
-          grpc::Status st = stub->ProcessPosition(&ctx, preq, &reply);
-          if (!st.ok()) {
-            evict(endpoint, stub, st);
-            std::lock_guard lock(mu);
-            if (first_error.ok()) first_error = st;
-            return;
-          }
+    std::vector<std::thread> in_flight;
+    for (std::uint32_t pos = 0; pos < positions; ++pos) {
+      {
+        std::lock_guard lock(mu);
+        if (!first_error.ok()) break;
+      }
+      std::optional<CheckedOutNode> node = checkout_node();
+      if (!node) {
+        std::lock_guard lock(mu);
+        if (first_error.ok())
+          first_error = {grpc::StatusCode::UNAVAILABLE, "no compute node became available"};
+        break;
+      }
+      in_flight.emplace_back([&, pos, node = std::move(*node)] {
+        v1::PositionRequest preq;
+        preq.set_slice_id(req->slice_id());
+        preq.set_frame_in_die(pos);
+        for (auto s : slot_lists[pos]) preq.add_slots(s);
+        grpc::ClientContext ctx;
+        ctx.set_deadline(std::chrono::system_clock::now() + timing_.position_deadline);
+        v1::PositionValue reply;
+        grpc::Status st = node.stub->ProcessPosition(&ctx, preq, &reply);
+        if (st.ok()) {
           std::lock_guard lock(mu);
           values[pos] = reply.value();
+        } else {
+          // Recorded before the eviction wakes blocked checkouts, so the
+          // dispatcher observes this root cause instead of stamping its own
+          // pool-exhausted error over it.
+          {
+            std::lock_guard lock(mu);
+            if (first_error.ok()) first_error = st;
+          }
+          evict(node.endpoint, node.stub, st);
         }
+        checkin(node.endpoint, node.stub);
       });
     }
-    for (auto& w : workers) w.join();
+    for (auto& t : in_flight) t.join();
     if (!first_error.ok()) return release_and_keep_error(first_error);
 
     // ⑦ — the slice is done; its slots may hold the next slice's frames.
@@ -176,15 +190,66 @@ class ControllerService final : public v1::Controller::Service {
   }
 
  private:
+  struct NodeEntry {
+    std::shared_ptr<v1::ComputeNode::Stub> stub;
+    // True while one invocation is in flight on this connection — a node
+    // serves at most one position at a time.
+    bool busy;
+  };
+
+  // A checked-out pool entry; the shared_ptr keeps the stub alive even if the
+  // endpoint is evicted or re-registered while the invocation is in flight.
+  struct CheckedOutNode {
+    std::string endpoint;
+    std::shared_ptr<v1::ComputeNode::Stub> stub;
+  };
+
+  // Blocks until some node in the live pool is free and marks it busy.
+  // Returns nullopt when the pool empties (every node evicted mid-slice) or
+  // when no node frees within position_deadline plus slack — every in-flight
+  // call is bounded by position_deadline, and the slack lets such a call hit
+  // its own deadline first, so its status (the root cause) wins over this
+  // pool-exhausted fallback.
+  std::optional<CheckedOutNode> checkout_node() {
+    std::unique_lock lock(nodes_mu_);
+    auto free_node = [this] {
+      return std::find_if(nodes_.begin(), nodes_.end(),
+                          [](const auto& kv) { return !kv.second.busy; });
+    };
+    bool woke = nodes_cv_.wait_for(lock, timing_.position_deadline + std::chrono::seconds(5),
+                                   [&] { return nodes_.empty() || free_node() != nodes_.end(); });
+    if (!woke || nodes_.empty()) return std::nullopt;
+    auto it = free_node();
+    it->second.busy = true;
+    return CheckedOutNode{it->first, it->second.stub};
+  }
+
+  // Returns a checked-out node to the pool. Skipped when the endpoint was
+  // evicted or re-registered since checkout — the current entry then belongs
+  // to a different connection whose free/busy state is not ours to change.
+  void checkin(const std::string& endpoint, const std::shared_ptr<v1::ComputeNode::Stub>& stub) {
+    {
+      std::lock_guard lock(nodes_mu_);
+      auto it = nodes_.find(endpoint);
+      if (it == nodes_.end() || it->second.stub != stub) return;
+      it->second.busy = false;
+    }
+    nodes_cv_.notify_all();
+  }
+
   // Removes a failed node from the pool so later slices stop dispatching to
-  // it. Skipped when the endpoint re-registered since this slice's snapshot —
-  // the pool then holds a fresh connection the failure says nothing about.
+  // it. Skipped when the endpoint re-registered since checkout — the pool
+  // then holds a fresh connection the failure says nothing about. Waiting
+  // checkouts are woken so they can observe an emptied pool.
   void evict(const std::string& endpoint, const std::shared_ptr<v1::ComputeNode::Stub>& stub,
              const grpc::Status& why) {
-    std::lock_guard lock(nodes_mu_);
-    auto it = nodes_.find(endpoint);
-    if (it == nodes_.end() || it->second != stub) return;
-    nodes_.erase(it);
+    {
+      std::lock_guard lock(nodes_mu_);
+      auto it = nodes_.find(endpoint);
+      if (it == nodes_.end() || it->second.stub != stub) return;
+      nodes_.erase(it);
+    }
+    nodes_cv_.notify_all();
     std::cerr << "evicting node " << endpoint << ": " << why.error_message() << std::endl;
   }
 
@@ -193,8 +258,9 @@ class ControllerService final : public v1::Controller::Service {
   Timing timing_;
   std::mutex nodes_mu_;
   std::condition_variable nodes_cv_;
-  // Key: node endpoint as it registered. Value: stub dialing that endpoint.
-  std::map<std::string, std::shared_ptr<v1::ComputeNode::Stub>> nodes_;
+  // Key: node endpoint as it registered. Value: that endpoint's connection
+  // and in-flight state.
+  std::map<std::string, NodeEntry> nodes_;
 };
 
 }  // namespace inspection

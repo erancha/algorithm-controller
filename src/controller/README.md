@@ -50,17 +50,18 @@ empty stream (`"camera reported no frames"`) and a non-OK stream `Finish()` stat
 the same way, and on every abort path any slots the camera already wrote are released before
 returning, so a partial slice never leaks memory-box capacity.
 
-## Ⅳa: per-node worker dispatch
+## Ⅳa: free-node dispatch from the live pool
 
 Once the frame index is complete, `ProcessSlice` composes each position's slot list in die order
-(Ⅳa — see the [worked trace](../../README.md#ⅳa-from-lookup-table-to-invocation)) and starts one
-worker thread per registered node. Each worker loops: take the next undispatched
-position under a shared mutex, call that node's `ProcessPosition` (⑥) under a 1-minute deadline,
-write the reply into `values[position]`. A node stays busy with at most one call in flight —
-"whichever node is free" falls out of every worker racing for the next position, with no central
-scheduler assigning work. A `ProcessPosition` failure or timeout on any node evicts that node,
-stops new dispatch, releases the slice's slots, and returns that error as the slice's result —
-a stalled node and a crashed node end the same way, as a bounded error.
+(Ⅳa — see the [worked trace](../../README.md#ⅳa-from-lookup-table-to-invocation)) and dispatches
+positions in order: check out a free node from the live pool — blocking while every node is
+mid-call, since each in-flight invocation is bounded by the per-position deadline — and call that
+node's `ProcessPosition` (⑥) on its own thread, writing the reply into `values[position]`. A node
+serves at most one call at a time, and because every checkout reads the live pool, a node that
+registers while the slice is already dispatching starts receiving positions immediately — the
+pool being non-empty is enough to begin, and concurrency grows as registrations land. A `ProcessPosition` failure or timeout on any node evicts that node,
+stops new dispatch, releases the slice's slots, and returns that error as the slice's result — a
+stalled node and a crashed node end the same way, as a bounded error.
 
 ## Flags
 
