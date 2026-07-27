@@ -16,8 +16,8 @@ export VCPKG_ROOT=~/vcpkg     # your vcpkg checkout; the first configure compile
 ```
 
 `./scripts/start.sh --help` lists the granular actions (individual services, driver-only runs)
-and options (pacing, compute cost, node replicas). `./scripts/test.sh` builds and runs the unit
-and end-to-end test suite.
+and options (pacing, compute cost, node replicas). `./scripts/test.sh` builds and runs the test
+suite — all of it, or only the layers named as arguments (`unit`, `service`, `e2e`).
 
 Every run simulates acquisition: the camera serves the fixture images generated above as if they
 were live sensor frames (`--simulate` — the only mode `start.sh` uses; hardware acquisition is

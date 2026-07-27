@@ -11,16 +11,30 @@ jobs:
     # First run compiles gRPC and Protobuf from source via vcpkg (tens of minutes);
     # later runs restore them from the binary cache below and finish in a few minutes.
     timeout-minutes: 90
+    env:
+      VCPKG_CACHE_PATH: ~/.cache/vcpkg/archives
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache vcpkg-built dependencies
-        uses: actions/cache@v4
+      - name: Restore vcpkg-built dependencies
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/vcpkg/archives
+          path: ${{ env.VCPKG_CACHE_PATH }}
           key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: vcpkg-${{ runner.os }}-
 
       - name: Build and run test suite
         # VCPKG_INSTALLATION_ROOT points at the runner's preinstalled vcpkg.
         run: VCPKG_ROOT="$VCPKG_INSTALLATION_ROOT" scripts/test.sh
+
+      # Explicit save that runs even when the build or tests fail, so the
+      # tens-of-minutes gRPC build is banked for the next run no matter how
+      # this one ends. Skipped on an exact cache hit — the archive is
+      # already stored under this key.
+      - name: Save vcpkg-built dependencies
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VCPKG_CACHE_PATH }}
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}

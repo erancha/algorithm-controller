@@ -1,46 +1,26 @@
-add_executable(smoke_test smoke_test.cpp)
-target_link_libraries(smoke_test PRIVATE GTest::gtest_main)
-add_test(NAME smoke_test COMMAND smoke_test)
+# Each test carries a ctest label naming its layer, so scripts/test.sh can run
+# layers selectively (ctest -L): "unit" tests exercise one component in-process,
+# "service" tests bring up in-process gRPC servers, and "e2e" launches the full
+# five-process pipeline.
+function(add_layer_test name layer)
+  add_executable(${name} ${name}.cpp)
+  target_link_libraries(${name} PRIVATE ${ARGN} GTest::gtest_main)
+  add_test(NAME ${name} COMMAND ${name})
+  set_tests_properties(${name} PROPERTIES LABELS ${layer})
+endfunction()
 
-add_executable(pgm_test pgm_test.cpp)
-target_link_libraries(pgm_test PRIVATE common GTest::gtest_main)
-add_test(NAME pgm_test COMMAND pgm_test)
+add_layer_test(smoke_test unit)
+add_layer_test(pgm_test unit common)
+add_layer_test(proto_test unit proto_lib)
+add_layer_test(free_list_test unit common)
+add_layer_test(shm_segment_test unit membox)
+add_layer_test(membox_test unit membox)
+add_layer_test(fixtures_test unit camera_lib)
+add_layer_test(position_score_test unit algorithm)
 
-add_executable(proto_test proto_test.cpp)
-target_link_libraries(proto_test PRIVATE proto_lib GTest::gtest_main)
-add_test(NAME proto_test COMMAND proto_test)
-
-add_executable(free_list_test free_list_test.cpp)
-target_link_libraries(free_list_test PRIVATE common GTest::gtest_main)
-add_test(NAME free_list_test COMMAND free_list_test)
-
-add_executable(shm_segment_test shm_segment_test.cpp)
-target_link_libraries(shm_segment_test PRIVATE membox GTest::gtest_main)
-add_test(NAME shm_segment_test COMMAND shm_segment_test)
-
-add_executable(membox_test membox_test.cpp)
-target_link_libraries(membox_test PRIVATE membox GTest::gtest_main)
-add_test(NAME membox_test COMMAND membox_test)
-
-add_executable(fixtures_test fixtures_test.cpp)
-target_link_libraries(fixtures_test PRIVATE camera_lib GTest::gtest_main)
-add_test(NAME fixtures_test COMMAND fixtures_test)
-
-add_executable(position_score_test position_score_test.cpp)
-target_link_libraries(position_score_test PRIVATE algorithm GTest::gtest_main)
-add_test(NAME position_score_test COMMAND position_score_test)
-
-add_executable(camera_service_test camera_service_test.cpp)
-target_link_libraries(camera_service_test PRIVATE camera_lib GTest::gtest_main)
-add_test(NAME camera_service_test COMMAND camera_service_test)
-
-add_executable(node_service_test node_service_test.cpp)
-target_link_libraries(node_service_test PRIVATE algorithm GTest::gtest_main)
-add_test(NAME node_service_test COMMAND node_service_test)
-
-add_executable(controller_service_test controller_service_test.cpp)
-target_link_libraries(controller_service_test PRIVATE membox proto_lib GTest::gtest_main)
-add_test(NAME controller_service_test COMMAND controller_service_test)
+add_layer_test(camera_service_test service camera_lib)
+add_layer_test(node_service_test service algorithm)
+add_layer_test(controller_service_test service membox proto_lib)
 
 add_test(NAME e2e COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/e2e.sh ${CMAKE_BINARY_DIR})
-set_tests_properties(e2e PROPERTIES TIMEOUT 120)
+set_tests_properties(e2e PROPERTIES TIMEOUT 120 LABELS e2e)

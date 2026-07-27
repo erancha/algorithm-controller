@@ -42,13 +42,8 @@ Options:
                    dimension, reporting wall time, detection ranking, and the
                    per-node CPU-time distribution, then exit
   --help           show this help
-
-Environment:
-  ALGCTL_BUILD     build directory; defaults to ~/algorithm-controller-build
-                   when the repo lives on a Windows mount (/mnt/*), else
-                   <repo>/build
-  VCPKG_ROOT       vcpkg checkout providing the toolchain (required)
 EOF
+  usage_environment
 }
 
 SLICE=0; FRAME_RATE=200; COMPUTE_MS=200; NODE_COUNT=3; GENERATE=0; DURATION=0
@@ -88,9 +83,7 @@ fi
 # No services named = all of them.
 want() { [[ ${#SERVICES[@]} -eq 0 ]] || printf '%s\n' "${SERVICES[@]}" | grep -qx "$1"; }
 
-[[ -d "$BUILD" ]] || cmake -B "$BUILD" -S "$REPO_DIR" \
-  -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT:?set VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-cmake --build "$BUILD" -j
+build_project
 
 # One knob sizes the whole data path. Frames are FRAME_DIM×FRAME_DIM
 # single-byte pixels; the slot count must cover every frame of the largest
