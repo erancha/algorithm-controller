@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    # First run compiles gRPC and Protobuf from source via vcpkg (tens of minutes);
+    # later runs restore them from the binary cache below and finish in a few minutes.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache vcpkg-built dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/vcpkg/archives
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
+      - name: Build and run test suite
+        # VCPKG_INSTALLATION_ROOT points at the runner's preinstalled vcpkg.
+        run: VCPKG_ROOT="$VCPKG_INSTALLATION_ROOT" scripts/test.sh
