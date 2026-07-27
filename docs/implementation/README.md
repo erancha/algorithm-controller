@@ -6,16 +6,8 @@ the pixel plane (Ⅴ, and the data half of Ⅵ), so pixels never cross gRPC.
 
 ## Usage
 
-### Getting started
-
-```bash
-export VCPKG_ROOT=~/vcpkg     # your vcpkg checkout; the first configure compiles gRPC and
-                              # protobuf from source (several minutes, once)
-./scripts/start.sh generate   # one-time: build and render the fixture images
-./scripts/start.sh            # start the whole stack, run one slice, tear down
-```
-
-`./scripts/start.sh --help` lists the granular actions (individual services, driver-only runs)
+The build-and-run commands are in [Getting started](../../README.md#getting-started) at the repo
+root. `./scripts/start.sh --help` lists the granular actions (individual services, driver-only runs)
 and options (pacing, compute cost, node replicas). `./scripts/test.sh` builds and runs the test
 suite — all of it, or only the layers named as arguments (`unit`, `service`, `e2e`).
 
