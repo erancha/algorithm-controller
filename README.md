@@ -1,5 +1,7 @@
 # Algorithm Controller
 
+[![CI](https://github.com/erancha/algorithm-controller/actions/workflows/ci.yml/badge.svg)](https://github.com/erancha/algorithm-controller/actions/workflows/ci.yml)
+
 Design of a controller that, one [`process_slice`](#architecture) call at a time, distributes a
 wafer slice's frames across a group of compute nodes and returns the gathered results (one
 numeric value per frame-in-die position).
