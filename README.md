@@ -2,32 +2,16 @@
 
 [![CI](https://github.com/erancha/algorithm-controller/actions/workflows/ci.yml/badge.svg)](https://github.com/erancha/algorithm-controller/actions/workflows/ci.yml)
 
-Design of a wafer-inspection tool's controller: each [`process_slice`](#architecture) call farms
+Design and [implementation](docs/implementation/README.md) of a wafer-inspection tool's controller: each [`process_slice`](#architecture) call farms
 a slice's frame-in-die positions out to a group of compute nodes and gathers one numeric value
 per position.
 
-**Contents:** [Getting started](#getting-started) · [Problem statement](#problem-statement) ·
+**Contents:** [Getting started](docs/implementation/README.md#getting-started) ·
+[Problem statement](#problem-statement) ·
 [Terminology](#terminology) · [Derived requirements](#derived-requirements) ·
 [Solution overview](#solution-overview) · [Architecture](#architecture) ·
 [Component APIs](#component-apis) · [Implementation](docs/implementation/README.md) ·
 [Appendix: slice anatomy](#appendix-slice-anatomy) · [License](#license)
-
-## Getting started
-
-Requires a Linux shell, CMake ≥ 3.25, a C++20 compiler, and a
-[vcpkg](https://github.com/microsoft/vcpkg) checkout (gRPC, Protobuf, and GoogleTest come from its
-manifest):
-
-```bash
-export VCPKG_ROOT=~/vcpkg     # your vcpkg checkout; the first configure compiles gRPC and
-                              # protobuf from source (several minutes, once)
-./scripts/start.sh generate   # one-time: build and render the fixture images
-./scripts/start.sh            # start the whole stack, run one slice, tear down
-./scripts/test.sh             # build and run the test suite (unit, service, e2e)
-```
-
-[Implementation](docs/implementation/README.md) covers what a run simulates and its timing knobs,
-the process topology, and the memory footprint.
 
 ## Problem statement
 

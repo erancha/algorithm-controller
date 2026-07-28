@@ -1,13 +1,28 @@
 # Implementation
 
-The [main design](../../README.md#architecture) runs as five processes at the repo root: gRPC
-serves every control-plane call (Ⅰ–Ⅳ, and the bookkeeping half of Ⅵ), POSIX shared memory serves
-the pixel plane (Ⅴ, and the data half of Ⅵ), so pixels never cross gRPC.
+The design's two-machine architecture collapses onto one host: `start.sh`
+launches each binary on its own localhost port, and the memory box is a POSIX shared-memory
+segment that every process maps. gRPC serves every control-plane call (Ⅰ–Ⅳ, and the
+bookkeeping half of Ⅵ), shared memory serves the pixel plane (Ⅴ, and the data half of Ⅵ),
+so pixels never cross gRPC.
 
 ## Usage
 
-The build-and-run commands are in [Getting started](../../README.md#getting-started) at the repo
-root. `./scripts/start.sh --help` lists the granular actions (individual services, driver-only runs)
+### Getting started
+
+Everything runs on one local machine as five ordinary OS processes — no Docker or other
+container runtime involved. Requires a Linux shell, CMake ≥ 3.25, a C++20 compiler, and a
+[vcpkg](https://github.com/microsoft/vcpkg) checkout (gRPC, Protobuf, and GoogleTest come from
+its manifest). From the repo root:
+
+```bash
+export VCPKG_ROOT=~/vcpkg     # your vcpkg checkout; the first configure compiles gRPC and
+                              # protobuf from source (several minutes, once)
+./scripts/start.sh generate   # one-time: build and render the fixture images
+./scripts/start.sh            # start the whole stack, run one slice, tear down
+```
+
+`./scripts/start.sh --help` lists the granular actions (individual services, driver-only runs)
 and options (pacing, compute cost, node replicas). `./scripts/test.sh` builds and runs the test
 suite — all of it, or only the layers named as arguments (`unit`, `service`, `e2e`).
 
