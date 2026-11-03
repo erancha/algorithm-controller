@@ -1,8 +1,8 @@
 # membox
 
 Client library (`libmembox`) plus the `membox-manager` process — together the pixel plane of the
-[main design](../../README.md#component-apis): a bank of picture-sized slots that camera, nodes,
-and controller share without pixels ever crossing gRPC.
+[architecture](../../docs/architecture.md#storage): a bank of picture-sized slots that camera,
+nodes, and controller share without pixels ever crossing gRPC.
 
 ## Two-plane split
 
@@ -61,5 +61,5 @@ the library, is responsible for not reading through a view whose slot has since 
 `--listen addr` (default `localhost:50050`), `--slots N` (default 512), `--frame-bytes N`
 (default 65536), `--shm name` (default `/algctl-membox`).
 
-See the root README's [Component APIs](../../README.md#component-apis) — blocks Ⅴ (`read_frame`)
-and Ⅵ (`write_frame`, `release_slots`) are this library's public surface.
+Blocks Ⅴ (`read_frame`) and Ⅵ (`write_frame`, `release_slots`) in
+[component APIs](../../docs/component-apis.md) are this library's public surface.

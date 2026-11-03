@@ -1,8 +1,9 @@
 # camera
 
-Serves the acquisition side of the [main design](../../README.md#component-apis): images a slice
-(②) by streaming every frame through `write_frame` (③) and reporting each placement (④) before
-signaling completion (⑤) — see `src/camera/camera_service.hpp`.
+Serves the acquisition side of the [architecture](../../docs/architecture.md): images a slice (②)
+by streaming every frame through `write_frame` (③) and reporting each placement (④) before
+signaling completion (⑤) — see `src/camera/camera_service.hpp`. Its contract is blocks Ⅱ, Ⅲ and
+the `write_frame` half of Ⅵ in [component APIs](../../docs/component-apis.md).
 
 ## Three modes
 
@@ -51,9 +52,8 @@ positions 7 and 19 to score highest.
 ## Pacing
 
 `--frame-rate` (default 200 frames/s) sleeps between successive `write_frame` calls inside
-`ImageSlice`, modeling acquisition as the physical rate limiter — the default 480-frame slice (20
-dies × 24 frames/die) then takes about 2.4 s to image. `--frame-rate 0` disables pacing, the
-setting `tests/e2e.sh` uses so unit and integration runs stay fast.
+`ImageSlice`, modeling acquisition as the physical rate limiter. `--frame-rate 0` disables pacing,
+the setting `tests/e2e.sh` uses so unit and integration runs stay fast.
 
 ## Slot ownership on a broken stream
 
@@ -61,6 +61,3 @@ A frame's slot changes owner the moment its ④ report is delivered: reported sl
 controller's to release (its abort path does), and a slot whose report failed — the client
 disconnected mid-stream — is released by the camera itself, since nobody else ever learned of
 it. Either way a broken stream leaks no memory-box capacity.
-
-See the root README's [Component APIs](../../README.md#component-apis) — blocks Ⅱ and Ⅲ are this
-service's `ImageSlice` contract; block Ⅵ's `write_frame` half is where frames actually land.

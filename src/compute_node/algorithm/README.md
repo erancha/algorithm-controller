@@ -1,9 +1,9 @@
 # compute_node/algorithm
 
 `position_score` (`src/compute_node/algorithm/position_score.cpp`) is the algorithm block Ⅳ of the
-[main design](../../../README.md#component-apis) runs per invocation: input is N frames imaging
-the same frame-in-die position, one per die; the return value is a single `double`, near zero when
-the dies agree and large when one carries a defect.
+[design](../../../docs/component-apis.md#ⅳ-controller--compute-node-⑥) runs per invocation: input is
+N frames imaging the same frame-in-die position, one per die; the return value is a single `double`,
+near zero when the dies agree and large when one carries a defect.
 
 ## Method: cross-die comparison against a computed reference
 
@@ -50,6 +50,3 @@ averaging the two middle values would add a floating-point (or rounding) step th
 `nth_element` selection avoids, at the cost of an even-N median not being the textbook statistical
 median. The design accepts that trade: the reference only needs to be a value the majority of dies
 agree on, not a mathematically exact midpoint.
-
-See the root README's [Component APIs](../../../README.md#component-apis), block Ⅳ, for how this
-fits the rest of the pipeline.

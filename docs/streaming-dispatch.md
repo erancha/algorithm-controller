@@ -1,9 +1,9 @@
 # Streaming dispatch
 
-**OPEN — not part of the current design.** The [main design](../README.md) dispatches a slice's
-invocations only after `on_slice_imaged`, keeping acquisition and compute strictly sequential per
-slice. This sketch overlaps them; it is recorded here so the main README can stay at one level of
-detail.
+**OPEN — not part of the current design.** The [main design](architecture.md#shared-mechanisms)
+dispatches a slice's invocations only after `on_slice_imaged`, keeping acquisition and compute
+strictly sequential per slice. This sketch overlaps them; it is recorded here so the architecture
+document can stay at one level of detail.
 
 ## Idea
 
@@ -57,4 +57,4 @@ default rather than a bet on scan order.
 Once values stream in per position, `release_slots` can also fire per position instead of per
 slice, cutting peak memory-box occupancy and letting the next slice's imaging start before this
 slice's last computations drain. That abandons the "one slice at a time" simplification of the
-main design, so it belongs to this sketch, not the README.
+main design, so it belongs to this sketch.
