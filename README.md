@@ -39,7 +39,7 @@ messages, such as slice ids, slot numbers and results, cross the network.
 
 ```mermaid
 flowchart LR
-    DRV[Tool driver] -->|process a slice| CTRL
+    DRV[Tool driver] -->|① process a slice| CTRL
     subgraph CM[controller machine]
         CTRL[Controller<br/>+ frame index]
     end
@@ -48,12 +48,15 @@ flowchart LR
         MB[(Memory box<br/>one picture per slot)]
         CN[Compute nodes ×N]
     end
-    CTRL -->|photograph the slice| CAM
-    CAM -->|store pictures| MB
-    CAM -->|which slot holds which frame| CTRL
-    CTRL -->|one job per position,<br/>one value back| CN
+    CTRL -->|② photograph the slice| CAM
+    CAM -->|③ store pictures| MB
+    CAM -->|④ which slot holds which frame<br/>⑤ every picture stored| CTRL
+    CTRL -->|⑥ one job per position,<br/>one value back| CN
     MB -.->|read frames in place| CN
+    CTRL -->|⑦ free the slice slots| MB
 ```
+
+The numbers ①–⑦ are the steps of one slice, in order; the dotted read happens inside ⑥.
 
 Architecture continues from here: [docs/architecture.md](docs/architecture.md).
 
