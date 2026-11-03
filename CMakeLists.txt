@@ -31,7 +31,7 @@ add_library(membox src/membox/shm_segment.cpp)
 target_include_directories(membox PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(membox PUBLIC rt)
 
-target_sources(membox PRIVATE src/membox/membox.cpp)
+target_sources(membox PRIVATE src/membox/membox.cpp src/membox/membox_control.cpp)
 target_link_libraries(membox PUBLIC proto_lib)
 add_executable(membox-manager src/membox/manager_main.cpp)
 target_link_libraries(membox-manager PRIVATE membox)

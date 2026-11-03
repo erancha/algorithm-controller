@@ -33,8 +33,8 @@ where one die differs from the rest, which is how a defect shows up. The design 
 
 ## Architecture
 
-The controller runs on its own machine. The camera, the memory box and the compute nodes share a
-second machine, where every process reads pictures straight from the memory box. Only small
+The controller can run on its own machine. The camera, the memory box and the compute nodes share
+a second machine, where every process reads pictures straight from the memory box. Only small
 messages, such as slice ids, slot numbers and results, cross the network.
 
 ```mermaid

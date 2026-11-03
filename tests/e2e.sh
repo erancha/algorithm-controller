@@ -26,7 +26,7 @@ for p in 50061 50062 50063; do
 done
 sleep 0.3
 "$BUILD/controller" --listen localhost:50052 --camera localhost:50051 \
-  --manager localhost:50050 --shm /algctl-e2e --frame-bytes $FB & PIDS+=($!)
+  --manager localhost:50050 & PIDS+=($!)
 sleep 0.3
 
 check_slice() {

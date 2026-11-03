@@ -129,7 +129,8 @@ TEST(ControllerService, GathersOneValuePerPositionAndReleasesSlots) {
   auto [na_server, na_channel, na_ep] = serve(node_a);
   auto [nb_server, nb_channel, nb_ep] = serve(node_b);
 
-  ControllerService controller(cam_channel, box);
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control);
   register_node(controller, na_ep);
   register_node(controller, nb_ep);
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
@@ -176,7 +177,8 @@ TEST(ControllerService, DistributesPositionsAcrossFreeNodes) {
   auto [na_server, na_channel, na_ep] = serve(node_a);
   auto [nb_server, nb_channel, nb_ep] = serve(node_b);
 
-  ControllerService controller(cam_channel, box);
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control);
   register_node(controller, na_ep);
   register_node(controller, nb_ep);
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
@@ -214,7 +216,8 @@ TEST(ControllerService, CameraErrorPropagates) {
   FakeNode node_a;
   auto [na_server, na_channel, na_ep] = serve(node_a);
 
-  ControllerService controller(cam_channel, box);
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control);
   register_node(controller, na_ep);
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
   auto stub = v1::Controller::NewStub(ctrl_channel);
@@ -246,7 +249,8 @@ TEST(ControllerService, EmptyStreamFailsPrecondition) {
   FakeNode node_a;
   auto [na_server, na_channel, na_ep] = serve(node_a);
 
-  ControllerService controller(cam_channel, box);
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control);
   register_node(controller, na_ep);
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
   auto stub = v1::Controller::NewStub(ctrl_channel);
@@ -280,7 +284,8 @@ TEST(ControllerService, IncompleteSliceFailsPrecondition) {
   FakeNode node_a;
   auto [na_server, na_channel, na_ep] = serve(node_a);
 
-  ControllerService controller(cam_channel, box);
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control);
   register_node(controller, na_ep);
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
   auto stub = v1::Controller::NewStub(ctrl_channel);
@@ -317,7 +322,8 @@ TEST(ControllerService, NodeFailureAbortsAndReleases) {
   FailingNode node_a;
   auto [na_server, na_channel, na_ep] = serve(node_a);
 
-  ControllerService controller(cam_channel, box);
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control);
   register_node(controller, na_ep);
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
   auto stub = v1::Controller::NewStub(ctrl_channel);
@@ -350,7 +356,8 @@ TEST(ControllerService, NoNodesFailsPrecondition) {
   auto [cam_server, cam_channel, cam_ep] = serve(camera);
 
   // Short first-node wait: the barrier expiring, not a 10 s default, is under test.
-  ControllerService controller(cam_channel, box,
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control,
                                {.first_node_wait = std::chrono::milliseconds(50)});
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
   auto stub = v1::Controller::NewStub(ctrl_channel);
@@ -383,7 +390,8 @@ TEST(ControllerService, SliceWaitsForFirstRegistration) {
   FakeNode node_a;
   auto [na_server, na_channel, na_ep] = serve(node_a);
 
-  ControllerService controller(cam_channel, box,
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control,
                                {.first_node_wait = std::chrono::seconds(5)});
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
   auto stub = v1::Controller::NewStub(ctrl_channel);
@@ -425,7 +433,8 @@ TEST(ControllerService, HungNodeTimesOutAbortsAndEvicts) {
 
   // Tight position deadline: the timeout firing, not the minute-long default,
   // is under test.
-  ControllerService controller(cam_channel, box,
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control,
                                {.position_deadline = std::chrono::milliseconds(200)});
   register_node(controller, na_ep);
   auto [ctrl_server, ctrl_channel, ctrl_ep] = serve(controller);
@@ -456,7 +465,8 @@ TEST(ControllerService, ReRegistrationReplacesInsteadOfDuplicating) {
   FakeCamera camera({});
   auto [cam_server, cam_channel, cam_ep] = serve(camera);
 
-  ControllerService controller(cam_channel, box);
+  MemboxControl control(mgr_channel);
+  ControllerService controller(cam_channel, control);
   register_node(controller, "localhost:59991");
   register_node(controller, "localhost:59991");  // restarted node, same endpoint
   register_node(controller, "localhost:59992");

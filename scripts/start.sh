@@ -181,7 +181,7 @@ if want node; then
 fi
 if want controller; then
   port_free_or_die 50052
-  "$BUILD/controller" --frame-bytes $FB --camera-stream-deadline-s $STREAM_DEADLINE \
+  "$BUILD/controller" --camera-stream-deadline-s $STREAM_DEADLINE \
     --position-deadline-s $POS_DEADLINE & PIDS+=($!)
   wait_for_port 50052
 fi

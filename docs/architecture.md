@@ -155,7 +155,7 @@ Two figures do not grow with frame size:
 | `src/proto/` | `inspection.proto`, the gRPC contract between all processes |
 | `src/controller/` | the `controller` binary: frame index, node pool, dispatch |
 | `src/camera/` | the `camera` binary and the fixture generator |
-| `src/membox/` | `libmembox`, linked by camera, controller and compute node, and the `membox-manager` binary |
+| `src/membox/` | `libmembox`, linked by camera, controller and compute node (the controller uses only its `MemboxControl`), and the `membox-manager` binary |
 | `src/compute_node/` | the `compute-node` binary; `algorithm/` holds the scoring algorithm |
 | `src/driver/` | the `tool-driver` binary, which plays the inspection tool |
 | `src/common/` | command-line flag parsing and PGM image reading and writing |

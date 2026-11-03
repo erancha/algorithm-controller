@@ -12,7 +12,7 @@
 #include <thread>
 #include <vector>
 #include "inspection.grpc.pb.h"
-#include "membox/membox.hpp"
+#include "membox/membox_control.hpp"
 
 namespace inspection {
 
@@ -43,10 +43,10 @@ class ControllerService final : public v1::Controller::Service {
     std::chrono::milliseconds position_deadline = std::chrono::minutes(1);
   };
 
-  ControllerService(std::shared_ptr<grpc::Channel> camera, Membox& box)
+  ControllerService(std::shared_ptr<grpc::Channel> camera, MemboxControl& box)
       : ControllerService(std::move(camera), box, Timing()) {}
 
-  ControllerService(std::shared_ptr<grpc::Channel> camera, Membox& box, Timing timing)
+  ControllerService(std::shared_ptr<grpc::Channel> camera, MemboxControl& box, Timing timing)
       : camera_(v1::Camera::NewStub(std::move(camera))), box_(box), timing_(timing) {}
 
   grpc::Status RegisterNode(grpc::ServerContext*, const v1::NodeEndpoint* req,
@@ -254,7 +254,7 @@ class ControllerService final : public v1::Controller::Service {
   }
 
   std::unique_ptr<v1::Camera::Stub> camera_;
-  Membox& box_;
+  MemboxControl& box_;
   Timing timing_;
   std::mutex nodes_mu_;
   std::condition_variable nodes_cv_;

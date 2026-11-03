@@ -55,6 +55,16 @@ TEST_F(MemboxFixture, ReleaseReturnsSlotsToTheManager) {
   EXPECT_NO_THROW(box.write_frame(px));  // pool refilled
 }
 
+// The controller's view of the box: slot bookkeeping with no segment handed in at all.
+TEST_F(MemboxFixture, ControlAllocatesAndReleasesWithoutAMapping) {
+  MemboxControl control(channel_);
+  std::vector<SlotOffset> slots;
+  for (int i = 0; i < 4; ++i) slots.push_back(control.alloc_slot());
+  EXPECT_THROW(control.alloc_slot(), std::runtime_error);  // no free slot
+  control.release_slots(slots);
+  EXPECT_NO_THROW(control.alloc_slot());  // pool refilled
+}
+
 TEST_F(MemboxFixture, ExhaustionAndBadOffsetFailFast) {
   Membox box(channel_, ShmSegment::open_existing("/algctl-membox-test", true), 256);
   std::vector<std::byte> px(256, std::byte{1});

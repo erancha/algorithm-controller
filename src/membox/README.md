@@ -8,8 +8,9 @@ nodes, and controller share without pixels ever crossing gRPC.
 
 Every call in `Membox` (`write_frame`, `read_frame`, `release_slots`) picks one of two paths:
 
-- **Bookkeeping, over gRPC** — `write_frame` calls `AllocSlot` on `membox-manager` to obtain a
-  slot before writing into it; `release_slots` calls `ReleaseSlots` (⑦). Both carry only slot
+- **Bookkeeping, over gRPC** — `MemboxControl` (`src/membox/membox_control.hpp`) holds this path
+  alone, and `Membox` contains one. `write_frame` calls `AllocSlot` on `membox-manager` to obtain
+  a slot before writing into it; `release_slots` calls `ReleaseSlots` (⑦). Both carry only slot
   numbers — small messages, regardless of frame size — and both carry a 10 s deadline, so a hung
   manager surfaces as a thrown error, never a stalled caller.
 - **Pixels, via mapped shm** — `write_frame`'s payload write is a `memcpy` into the process's own
@@ -17,12 +18,13 @@ Every call in `Membox` (`write_frame`, `read_frame`, `release_slots`) picks one 
   at all. `membox-manager` never sees a pixel; it only ever allocates and frees offsets.
 
 `membox-manager` creates the POSIX shm segment at startup, sized `slots × frame_bytes` (its
-`--slots` and `--frame-bytes` flags); every other process opens the same segment name read-only
-(compute nodes, controller) or read-write (camera). A fresh `create` first unlinks any stale
-segment of the same name, so a restart never inherits a previous run's mapping. The manager
-converts SIGTERM/SIGINT into a graceful server shutdown so the segment's owning destructor runs
-and unlinks it — a killed manager would otherwise leave the segment pinned in `/dev/shm`, which
-at production frame sizes holds gigabytes of RAM until the next run reclaims the name.
+`--slots` and `--frame-bytes` flags). Compute nodes open the same segment name read-only and the
+camera read-write. The controller only releases slots, so it holds a `MemboxControl` alone and
+maps nothing, which lets it run on a machine without the segment. A fresh `create` first unlinks
+any stale segment of the same name, so a restart never inherits a previous run's mapping. The
+manager converts SIGTERM/SIGINT into a graceful server shutdown so the segment's owning destructor
+runs and unlinks it — a killed manager would otherwise leave the segment pinned in `/dev/shm`,
+which at production frame sizes holds gigabytes of RAM until the next run reclaims the name.
 
 ## Backend abstraction
 
@@ -32,7 +34,7 @@ never `ShmSegment` itself. `SlotOffset` is an opaque byte offset that `read_fram
 backend ships: POSIX `shm_open` + `mmap` (`src/membox/shm_segment.cpp`). Because no caller above
 `Membox` touches `ShmSegment`'s internals, a future backend that maps physical device memory
 instead of a POSIX shm object could implement the same three calls with the same `SlotOffset`
-semantics and the same zero-copy aliasing — no caller (camera, controller, or compute node) would
+semantics and the same zero-copy aliasing — no caller (camera or compute node) would
 need to change to use it.
 
 ## Slot = byte offset
