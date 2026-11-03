@@ -38,6 +38,7 @@ a second machine, where every process reads pictures straight from the memory bo
 messages, such as slice ids, slot numbers and results, cross the network.
 
 ```mermaid
+%%{init: {"flowchart": {"wrappingWidth": 400}}}%%
 flowchart LR
     DRV[Tool driver] -->|① process a slice| CTRL
     subgraph CM[controller machine]
@@ -45,13 +46,13 @@ flowchart LR
     end
     subgraph MM[memory-box machine]
         CAM[Camera]
-        MB[(Memory box<br/>one picture per slot)]
         CN[Compute nodes ×N]
+        MB[(Memory box<br/>one picture per slot)]
     end
     CTRL <-->|"② → photograph the slice<br/>④ ← which slot holds which frame<br/>⑤ ← every picture stored"| CAM
+    CTRL -->|"⑥ one job per position,<br/>one value back"| CN
     CAM -->|③ store pictures| MB
-    CTRL -->|⑥ one job per position,<br/>one value back| CN
-    MB -.->|read frames in place| CN
+    CN -.->|read frames in place| MB
     CTRL -->|⑦ free the slice slots| MB
 ```
 
