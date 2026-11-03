@@ -36,26 +36,20 @@ Options:
   --duration N     repeat the slice for N seconds, printing each run's wall
                    time and a process-watch command for observing every
                    service's CPU and memory (default: run the slice once)
-  --collect [MAX]  run scripts/collect.sh over frame dimensions doubling from
-                   256 up to MAX — default 2048; e.g. 4096 extends the ladder
-                   to the 16 MiB production frame. One sequential slice per
-                   dimension, reporting wall time, detection ranking, and the
-                   per-node CPU-time distribution, then exit
   --help           show this help
+
+benchmark.sh runs this script once per frame size with --frame-rate and
+--compute-ms set to switch off the simulated delays (see benchmark.sh --help).
 EOF
   usage_environment
 }
 
 SLICE=0; FRAME_RATE=200; COMPUTE_MS=200; NODE_COUNT=3; GENERATE=0; DURATION=0
-FRAME_DIM=256; COLLECT=0; COLLECT_MAX=2048
+FRAME_DIM=256
 SERVICES=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --frame-dim) FRAME_DIM=${2:?missing value for --frame-dim}; shift 2 ;;
-    # The value is optional, so it is consumed only when the next word is
-    # numeric — anything else (an action, another flag) stays unparsed.
-    --collect) COLLECT=1
-      if [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]]; then COLLECT_MAX=$2; shift 2; else shift; fi ;;
     --slice) SLICE=${2:?missing value for --slice}; shift 2 ;;
     --duration) DURATION=${2:?missing value for --duration}; shift 2 ;;
     --frame-rate) FRAME_RATE=${2:?missing value for --frame-rate}; shift 2 ;;
@@ -67,18 +61,6 @@ while [[ $# -gt 0 ]]; do
     *) echo "unknown argument $1 (see start.sh --help)" >&2; exit 2 ;;
   esac
 done
-
-if [[ $COLLECT -eq 1 ]]; then
-  DIMS=(); d=256
-  while (( d <= COLLECT_MAX )); do DIMS+=("$d"); d=$((d * 2)); done
-  # A max that is not on the doubling ladder would silently truncate to the
-  # rung below it; refuse instead.
-  if [[ ${#DIMS[@]} -eq 0 || ${DIMS[-1]} -ne $COLLECT_MAX ]]; then
-    echo "--collect max must be 256 doubled some number of times (256, 512, ..., 2048, 4096, ...)" >&2
-    exit 2
-  fi
-  exec "$REPO_DIR/scripts/collect.sh" collect "${DIMS[@]}"
-fi
 
 # No services named = all of them.
 want() { [[ ${#SERVICES[@]} -eq 0 ]] || printf '%s\n' "${SERVICES[@]}" | grep -qx "$1"; }

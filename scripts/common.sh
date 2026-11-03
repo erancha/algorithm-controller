@@ -1,4 +1,4 @@
-# Sourced by start.sh and test.sh: resolves REPO_DIR and BUILD, and provides
+# Sourced by start.sh, test.sh and benchmark.sh: resolves REPO_DIR and BUILD, and provides
 # the shared build entry point and --help boilerplate.
 #
 # BUILD honors ALGCTL_BUILD when set. Otherwise, a repo on a Windows mount
