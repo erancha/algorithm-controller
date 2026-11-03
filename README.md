@@ -48,15 +48,15 @@ flowchart LR
         MB[(Memory box<br/>one picture per slot)]
         CN[Compute nodes ×N]
     end
-    CTRL -->|② photograph the slice| CAM
+    CTRL <-->|"② → photograph the slice<br/>④ ← which slot holds which frame<br/>⑤ ← every picture stored"| CAM
     CAM -->|③ store pictures| MB
-    CAM -->|④ which slot holds which frame<br/>⑤ every picture stored| CTRL
     CTRL -->|⑥ one job per position,<br/>one value back| CN
     MB -.->|read frames in place| CN
     CTRL -->|⑦ free the slice slots| MB
 ```
 
-The numbers ①–⑦ are the steps of one slice, in order; the dotted read happens inside ⑥.
+The numbers ①–⑦ are the steps of one slice, in order; on the controller–camera edge, → and ←
+give each step's direction. The dotted read happens inside ⑥.
 
 Architecture continues from here: [docs/architecture.md](docs/architecture.md).
 
