@@ -2,7 +2,7 @@
 
 The design behind the [README](../README.md)'s Architecture section: every part, how one slice
 moves through them, and how this implementation runs them on one host.
-[Problem](problem.md) defines the terms; [component APIs](component-apis.md) gives each call's
+[The inspection tool](inspection-tool.md) defines the terms; [component APIs](component-apis.md) gives each call's
 signature.
 
 ## Diagram

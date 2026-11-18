@@ -4,7 +4,7 @@ The calls behind each arrow of the [architecture diagram](architecture.md#diagra
 per roman numeral. [Reading the diagram](architecture.md#reading-the-diagram) explains how the
 step numbers and block numerals connect.
 
-Shared types. [Slice anatomy](problem.md#slice-anatomy) shows what slices, dies and frames are:
+Shared types. [Slice anatomy](inspection-tool.md#slice-anatomy) shows what slices, dies and frames are:
 
 ```cpp
 using SliceId    = std::uint64_t;

@@ -6,8 +6,7 @@ A design, with a working C++ implementation, for the controller of a wafer-inspe
 tool photographs a wafer one slice at a time, a slice being a strip of dies (identical chips).
 For each slice, the controller hands one job per frame-in-die position (the same spot on every
 die) to a free compute node and gathers one number per position. A high number marks a spot
-where one die differs from the rest, which is how a defect shows up. The design answers a
-[system-design interview question](docs/problem.md).
+where one die differs from the rest, which is how a defect shows up.
 
 ## Overview
 
@@ -86,7 +85,8 @@ All live in `scripts/`; each prints its full usage with `--help`.
 
 ## Details
 
-- [Problem](docs/problem.md): the interview question, the terms, and what a slice looks like.
+- [The inspection tool](docs/inspection-tool.md): what the tool asks of its controller, the
+  terms, and what a slice looks like.
 - [Architecture](docs/architecture.md): every part, how one slice runs, and the one-host process
   layout.
 - [Component APIs](docs/component-apis.md): the signature and contract of each call in the

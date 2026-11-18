@@ -1,19 +1,21 @@
-# Problem
+# The inspection tool
 
-The design question this repo answers, the terms the other documents use, and what a slice looks
-like. Part of the [architecture](architecture.md) documentation; the [README](../README.md) is the
-entry point.
+What the wafer-inspection tool asks of its controller, the terms the other documents use, and
+what a slice looks like. Part of the [architecture](architecture.md) documentation; the
+[README](../README.md) is the entry point.
 
-## Problem statement
+**Contents:** [What the controller does](#what-the-controller-does) · [Terminology](#terminology) ·
+[Constraints](#constraints) · [Slice anatomy](#slice-anatomy)
 
-*"Design the controller of a wafer-inspection tool that photographs a wafer slice by slice —
-[a slice is a strip of dies, and each die is captured as several frames](#slice-anatomy).
-Every picture lands in one slot (AKA offset) of a shared memory box, and from then on a frame is
-named by its slot, never copied. The controller, one slice at a time, splits the slice's work
-across a group of compute nodes; each invocation runs an algorithm on all the frames that share
-one frame-in-die position (i.e. the same frame position in every die) and returns a single
-numeric value; the controller then gathers those values: one per frame-in-die position, so
-[dies of six frames](#one-slice-diagram) yield six values for the slice."*
+## What the controller does
+
+The tool photographs a wafer slice by slice: [a slice is a strip of dies, and each die is captured
+as several frames](#slice-anatomy). Every picture lands in one slot of a shared memory box, and
+from then on a frame is named by its slot, never copied. One slice at a time, the controller
+splits the slice's work across a group of compute nodes. Each invocation runs an algorithm on all
+the frames that share one frame-in-die position (the same frame position in every die) and returns
+a single number. The controller then gathers those numbers, one per frame-in-die position, so
+[dies of six frames](#one-slice-diagram) yield six values for the slice.
 
 ## Terminology
 
@@ -23,10 +25,10 @@ numeric value; the controller then gathers those values: one per frame-in-die po
   die is imaged as a [grid of frames](#one-slice-diagram).
 - **frame-in-die position**: a frame's place in that grid. Dies are copies of one circuit, so a
   position is the same physical region in every die.
-- **slot**: one picture-sized cell of the shared memory box, identified by its numeric offset
-  into the box (which is why the problem also calls it an "offset").
+- **slot** (also called an offset): one picture-sized cell of the shared memory box, identified
+  by its numeric offset into the box.
 
-## Derived requirements
+## Constraints
 
 - As each picture lands, the acquisition side reports its placement to the controller: which
   die index and frame-in-die position it captures, and the slot that holds it.
