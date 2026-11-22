@@ -14,10 +14,12 @@ container runtime, and nothing is deployed elsewhere. It needs a Linux shell, CM
 later, a C++20 compiler, and a [vcpkg](https://github.com/microsoft/vcpkg) checkout. gRPC,
 Protobuf and GoogleTest come from its manifest, `vcpkg.json`.
 
-The working copy may live on the Linux filesystem or, under WSL2, on a Windows drive (`/mnt/*`).
-On a Windows drive the scripts build under `~/algorithm-controller-build` instead of in-tree,
-because linking the large debug binaries across WSL2's bridge to Windows drives is roughly an
-order of magnitude slower.
+Keep the working copy on the Linux filesystem (under WSL2,
+`~/projects/cpp/algorithm-controller`) rather than on a Windows drive (`/mnt/*`). There the
+scripts build in the repo's own `build/` folder. A working copy on a Windows drive still works,
+but its scripts build under `~/algorithm-controller-build` instead: WSL2 reaches Windows drives
+through a file-sharing protocol that makes every file access a round trip to the Windows side,
+and linking the large debug binaries through it is about ten times slower.
 
 ## Configuration
 
