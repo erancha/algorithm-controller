@@ -1,5 +1,12 @@
-build/
-fixtures/
-.superpowers/
-docs/superpowers/
-docs/senior-code-eval-*
+# Build output; on a Windows mount the build directory lives under $HOME instead (scripts/common.sh)
+/build/
+# Fixture images rendered by the camera's generator
+/fixtures/
+
+# AI-session working files
+/docs/superpowers/*
+/.superpowers/
+/.claude/*
+!/.claude/skills/
+/CLAUDE.local.md
+/graphify-out/

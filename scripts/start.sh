@@ -1,48 +1,45 @@
 #!/usr/bin/env bash
-# Builds when sources changed, then runs the pipeline — the whole stack, selected services, or
-# fixture generation. start.sh --help lists actions and options.
-
+# Builds when sources changed, then runs the pipeline: the whole stack, selected services, or
+# fixture generation.
+#
+# Usage: start.sh [options] [action ...]
+#
+# Actions:
+#   generate     build and render the fixture images, then exit (also runs
+#                automatically before the first start)
+#   membox | camera | node | controller
+#                start only the named services and stay up until Ctrl-C, so
+#                each can run in its own terminal
+#   driver       run one slice against already-running services, then exit
+#   (none)       full pipeline: start every service, run one slice through
+#                tool-driver, tear down
+#
+# Options:
+#   --frame-dim N    frame edge in pixels: frames are N×N single-byte pixels,
+#                    and fixtures, --frame-bytes, and the membox slot count are
+#                    all derived from this one value (default 256 = 64 KiB
+#                    frames; 4096 = the 16 MiB frames of a production-class
+#                    inspection camera)
+#   --slice N        slice id the driver runs (default 0)
+#   --frame-rate N   camera pacing in frames/s, 0 = unpaced (default 200)
+#   --compute-ms N   per-invocation compute cost on a node (default 200)
+#   --node-count N   compute-node replicas on consecutive ports (50061,
+#                    50062, ...); each registers itself with the controller,
+#                    which needs no node configuration (default 3)
+#   --duration N     repeat the slice for N seconds, printing each run's wall
+#                    time and a process-watch command for observing every
+#                    service's CPU and memory (default: run the slice once)
+#   -h, --help       show this help
+#
+# Examples:
+#   ./scripts/start.sh generate
+#   ./scripts/start.sh
+#   ./scripts/start.sh --frame-dim 1024 --node-count 4
+#   ./scripts/start.sh membox camera node controller    # one terminal; then, in another:
+#   ./scripts/start.sh driver
 set -euo pipefail
+# shellcheck source=common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
-
-usage() {
-  cat <<'EOF'
-Usage: start.sh [options] [action ...]
-
-Builds when sources changed, then runs the requested actions.
-
-Actions:
-  generate     build and render the fixture images, then exit (also runs
-               automatically before the first start)
-  membox | camera | node | controller
-               start only the named services and stay up until Ctrl-C, so
-               each can run in its own terminal
-  driver       run one slice against already-running services, then exit
-  (none)       full pipeline: start every service, run one slice through
-               tool-driver, tear down
-
-Options:
-  --frame-dim N    frame edge in pixels: frames are N×N single-byte pixels,
-                   and fixtures, --frame-bytes, and the membox slot count are
-                   all derived from this one value (default 256 = 64 KiB
-                   frames; 4096 = the 16 MiB frames of a production-class
-                   inspection camera)
-  --slice N        slice id the driver runs (default 0)
-  --frame-rate N   camera pacing in frames/s, 0 = unpaced (default 200)
-  --compute-ms N   per-invocation compute cost on a node (default 200)
-  --node-count N   compute-node replicas on consecutive ports (50061,
-                   50062, ...); each registers itself with the controller,
-                   which needs no node configuration (default 3)
-  --duration N     repeat the slice for N seconds, printing each run's wall
-                   time and a process-watch command for observing every
-                   service's CPU and memory (default: run the slice once)
-  --help           show this help
-
-benchmark.sh runs this script once per frame size with --frame-rate and
---compute-ms set to switch off the simulated delays (see benchmark.sh --help).
-EOF
-  usage_environment
-}
 
 SLICE=0; FRAME_RATE=200; COMPUTE_MS=200; NODE_COUNT=3; GENERATE=0; DURATION=0
 FRAME_DIM=256
@@ -55,10 +52,10 @@ while [[ $# -gt 0 ]]; do
     --frame-rate) FRAME_RATE=${2:?missing value for --frame-rate}; shift 2 ;;
     --compute-ms) COMPUTE_MS=${2:?missing value for --compute-ms}; shift 2 ;;
     --node-count) NODE_COUNT=${2:?missing value for --node-count}; shift 2 ;;
-    --help) usage; exit 0 ;;
+    -h|--help) print_help; exit 0 ;;
     generate) GENERATE=1; shift ;;
     membox|camera|node|controller|driver) SERVICES+=("$1"); shift ;;
-    *) echo "unknown argument $1 (see start.sh --help)" >&2; exit 2 ;;
+    *) die_usage "$1" ;;
   esac
 done
 

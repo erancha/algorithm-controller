@@ -1,8 +1,8 @@
 # Component APIs
 
-The calls behind each arrow of the [architecture diagram](architecture.md#diagram), one block
-per roman numeral. [Reading the diagram](architecture.md#reading-the-diagram) explains how the
-step numbers and block numerals connect.
+The calls behind each arrow of the [architecture diagram](architecture.md), one block per roman
+numeral. The paragraphs below that diagram explain how the step numbers and block numerals
+connect.
 
 Shared types. [Slice anatomy](inspection-tool.md#slice-anatomy) shows what slices, dies and frames are:
 

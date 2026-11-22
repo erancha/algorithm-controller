@@ -14,7 +14,7 @@ One binary, `camera`, selected by flags:
 - `--simulate` — serves `ImageSlice` by streaming the generated fixture files through
   `write_frame`, exactly as a hardware path would stream sensor frames; requires `--fixtures` to
   already hold a tree written by a prior `--generate` run.
-- hardware mode — OPEN, not implemented. Same `ImageSlice` service surface, frames sourced from a
+- There is no hardware mode. One would serve the same `ImageSlice` service, with frames from a
   sensor SDK instead of fixture files.
 
 ## Fixture tree layout

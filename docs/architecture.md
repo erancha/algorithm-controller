@@ -2,10 +2,12 @@
 
 The design behind the [README](../README.md)'s Architecture section: every part, how one slice
 moves through them, and how this implementation runs them on one host.
-[The inspection tool](inspection-tool.md) defines the terms; [component APIs](component-apis.md) gives each call's
-signature.
+[The inspection tool](inspection-tool.md) defines the terms; [component APIs](component-apis.md)
+gives each call's signature; the [ADRs](adr/) record the founding decisions.
 
-## Diagram
+**Contents:** [The parts](#the-parts) · [How a slice runs](#how-a-slice-runs) ·
+[Shared mechanisms](#shared-mechanisms) · [Storage](#storage) ·
+[Running on one host](#running-on-one-host) · [Codebase structure](#codebase-structure)
 
 Arrow style shows how a call behaves: **thick**, the caller waits for a reply; **thin**, a one-way
 message; **dotted**, data that moves without a command.
@@ -39,8 +41,6 @@ flowchart TB
     CTRL == "⑦<sup>Ⅵ</sup>&nbsp;<b>release_slots</b>" ==> MB
 ```
 
-### Reading the diagram
-
 Two numberings tie the diagram to the code. Circled numbers (①–⑦) are the steps of one slice, in
 order, one per solid arrow. Superscript roman numerals name the code blocks in
 [component APIs](component-apis.md), and the arrow's **bold** function name heads that block. So
@@ -55,9 +55,11 @@ per node at startup, before any slice exists, so it sits outside the ①–⑦ c
 Solid arrows travel over gRPC, with one exception: ③'s pixels land in the memory box through
 shared memory, and only its slot bookkeeping is a gRPC call. The dotted read (Ⅴ) is pure shared
 memory as well. Pixels therefore never cross gRPC, and every network message carries only
-identifiers and numbers.
+identifiers and numbers: gRPC gives the calls one written contract
+([ADR 0001](adr/0001-grpc-control-plane.md)), and shared memory spares the pixels a copy
+([ADR 0002](adr/0002-pixels-in-shared-memory.md)).
 
-## Parts
+## The parts
 
 - **Tool driver**: whatever runs the inspection tool. It calls `process_slice` once per slice.
 - **Controller**: one process on its own machine. It runs one slice at a time and collects one
@@ -92,14 +94,16 @@ identifiers and numbers.
   node announces its own address once at startup (Ⅶ), and the controller dispatches to whichever
   nodes have registered so far, so adding a node means starting it. A node whose invocation fails
   or times out is dropped and returns by registering again. A failed node costs only the slice in
-  flight. The [controller README](../src/controller/README.md) has the details.
+  flight. The [controller README](../src/controller/README.md) has the details;
+  [ADR 0003](adr/0003-nodes-register-themselves.md) weighs it against a static node list.
 - **Deadlines.** Every call carries a deadline, so a stalled peer surfaces as an error instead of
   a hang.
 - **Whole-slice dispatch.** The first invocation waits until the whole slice is imaged.
   Dispatching each position as soon as its frame has landed in every die would overlap imaging
-  with compute; [streaming dispatch](streaming-dispatch.md) sketches that and keeps it out of this
-  design.
-- **Compute nodes on other machines.** OPEN — not yet implemented (#1).
+  with compute; [streaming dispatch](streaming-dispatch.md) sketches that, and
+  [ADR 0004](adr/0004-whole-slice-dispatch.md) says why this design waits.
+- **Compute nodes beside the memory box.** Every compute node runs on the memory-box machine,
+  since it reads frames from that machine's shared memory.
 
 ## Storage
 
@@ -115,10 +119,8 @@ There is no database. A slice's state lives in two places, both gone once the sl
 This implementation puts both machines on one host. `scripts/start.sh` launches each binary on its
 own localhost port, and every process maps the same POSIX shared-memory segment.
 
-### Process topology
-
-Five binaries, each a separate OS process. Names, roles and step numbers match the
-[diagram](#diagram):
+Five binaries, each a separate OS process. Names, roles and step numbers match the diagram at the
+top of this page:
 
 | binary           | role (diagram)          | serves (gRPC)                     | calls |
 |------------------|--------------------------|-------------------------------------|-------|
@@ -128,25 +130,9 @@ Five binaries, each a separate OS process. Names, roles and step numbers match t
 | `compute-node`   | Compute node (×N)        | `ProcessPosition` (Ⅳ)                | Ⅴ `read_frame` (libmembox), Ⅶ `RegisterNode` |
 | `membox-manager` | memory box bookkeeping   | `AllocSlot`, `ReleaseSlots` (Ⅵ)      | — |
 
-### Memory footprint (dev scale)
-
-Resident memory per process, measured with `ps -o rss=` on a running 20-die slice (512 slots,
-64 KB frames, 3 compute nodes):
-
-| process                   | resident    | why |
-|----------------------------|-------------|-----|
-| `membox-manager`            | ~27 MB      | gRPC runtime floor; the free list holds slot numbers only |
-| `controller`                 | ~28 MB      | gRPC runtime floor; the frame index holds slot numbers only |
-| `camera`                     | ~58 MB      | gRPC floor plus PGM file buffers while streaming a slice |
-| `compute-node` (×3)           | ~37 MB each | gRPC floor; frames are read zero-copy from the mapped segment |
-| shm segment (512 × 64 KB)     | 32 MB, once | mapped by every process; the OS accounts it once, not per-mapper |
-
-Two figures do not grow with frame size:
-
-- **Controller memory.** The frame index stores only `uint64_t` slot numbers, so larger frames
-  leave it unchanged. Only more dies or positions grow it, by a few bytes per entry.
-- **Compute-node memory.** `read_frame` (Ⅴ) returns a view into the shared mapping, so the pixels
-  a node reads live once, in the mapping, and never in the node's own heap.
+Each process stays near the gRPC runtime's floor of a few tens of MB, and neither the controller
+nor a compute node grows with frame size; [memory footprint](development.md#memory-footprint)
+has the measurements.
 
 ## Codebase structure
 
@@ -161,3 +147,4 @@ Two figures do not grow with frame size:
 | `src/common/` | command-line flag parsing and PGM image reading and writing |
 | `tests/` | unit and gRPC service tests, plus `e2e.sh` for the five-process run |
 | `scripts/` | build, run, test and measurement entry points; see [development](development.md) |
+| `docs/` | this map, the topic documents it links, and the ADRs under `adr/` |

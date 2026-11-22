@@ -8,6 +8,10 @@ For each slice, the controller hands one job per frame-in-die position (the same
 die) to a free compute node and gathers one number per position. A high number marks a spot
 where one die differs from the rest, which is how a defect shows up.
 
+**Contents:** [Overview](#overview) · [Tech stack](#tech-stack) · [Architecture](#architecture) ·
+[Getting started](#getting-started) · [Scripts](#scripts) · [Details](#details) ·
+[License](#license)
+
 ## Overview
 
 - The camera photographs a slice into a shared memory box. Each picture is stored once and never
@@ -64,7 +68,7 @@ Architecture continues from here: [docs/architecture.md](docs/architecture.md).
 ## Getting started
 
 Needs a Linux shell, a C++20 compiler, CMake and vcpkg
-([details](docs/development.md#prerequisites)). From the repo root:
+([details](docs/development.md#working-copy-location)). From the repo root:
 
 ```bash
 export VCPKG_ROOT=~/vcpkg     # your vcpkg checkout; the first configure compiles gRPC and
@@ -81,7 +85,7 @@ All live in `scripts/`; each prints its full usage with `--help`.
 |---|---|
 | `start.sh` | Build when sources changed, then run the whole pipeline, single services, or fixture generation. |
 | `test.sh` | Build and run the test suite: every layer, or only the named ones. |
-| `benchmark.sh` | Run `start.sh --frame-rate 0 --compute-ms 5` (simulated delays off) once per frame size, 256 to 2048, and report each run's time and how the work split across the compute nodes ([Measure](docs/development.md#measure)). |
+| `benchmark.sh` | Run the pipeline once per frame size, 256 to 2048, with the simulated delays off, and report each run's time and how the work split across the compute nodes ([Measure](docs/development.md#measure)). |
 
 ## Details
 
@@ -91,9 +95,11 @@ All live in `scripts/`; each prints its full usage with `--help`.
   layout.
 - [Component APIs](docs/component-apis.md): the signature and contract of each call in the
   architecture diagram.
-- [Streaming dispatch](docs/streaming-dispatch.md): a deferred variant that overlaps imaging with
-  compute.
-- [Development](docs/development.md): build, run, test and measure locally.
+- [Streaming dispatch](docs/streaming-dispatch.md): an unimplemented variant that overlaps
+  imaging with compute.
+- [Development & deployment](docs/development.md): build, run, test and measure locally.
+- [Architecture decisions](docs/adr/): why gRPC, why pixels stay in shared memory, why nodes
+  register themselves, and why dispatch waits for the whole slice.
 - Component docs: [controller](src/controller/README.md), [camera](src/camera/README.md),
   [memory box](src/membox/README.md), [algorithm](src/compute_node/algorithm/README.md).
 

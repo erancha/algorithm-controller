@@ -1,9 +1,14 @@
 # Streaming dispatch
 
-**OPEN — not part of the current design.** The [main design](architecture.md#shared-mechanisms)
+A variant this design does not implement. The [main design](architecture.md#shared-mechanisms)
 dispatches a slice's invocations only after `on_slice_imaged`, keeping acquisition and compute
 strictly sequential per slice. This sketch overlaps them; it is recorded here so the architecture
-document can stay at one level of detail.
+document can stay at one level of detail. [ADR 0004](adr/0004-whole-slice-dispatch.md) says why
+the main design waits for the whole slice.
+
+**Contents:** [Idea](#idea) · [Timing](#timing) ·
+[Expected gain, and its limit](#expected-gain-and-its-limit) ·
+[Follow-on: per-position slot release](#follow-on-per-position-slot-release)
 
 ## Idea
 
